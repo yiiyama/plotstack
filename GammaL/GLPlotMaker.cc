@@ -159,31 +159,39 @@ public:
         histograms[kMt]->fill(mt, wgt, wgtErr);
         histograms[kMetMt]->fill(met, mt, wgt, wgtErr);
 
-        double dEta(photons.eta[0] - leptonEta);
-        double dPhi(TVector2::Phi_mpi_pi(photons.phi[0] - leptonPhi));
-        histograms[kDEtaPhotonLepton]->fill(dEta, wgt, wgtErr);
-        histograms[kDPhiPhotonLepton]->fill(dEta, wgt, wgtErr);
+        double dEtaGL(photons.eta[0] - leptonEta);
+        double dPhiGL(TVector2::Phi_mpi_pi(photons.phi[0] - leptonPhi));
+        histograms[kDEtaPhotonLepton]->fill(dEtaGL, wgt, wgtErr);
+        histograms[kDPhiPhotonLepton]->fill(dPhiGL, wgt, wgtErr);
 
-        double dR(std::sqrt(dEta * dEta + dPhi * dPhi));
-        histograms[kDRPhotonLepton]->fill(dR, wgt, wgtErr);
+        double dRGL(std::sqrt(dEtaGL * dEtaGL + dPhiGL * dPhiGL));
+        histograms[kDRPhotonLepton]->fill(dRGL, wgt, wgtErr);
 
-        histograms[kDPhiPhotonMet]->fill(TVector2::Phi_mpi_pi(photons.phi[0] - metPhi), wgt, wgtErr);
-        histograms[kDPhiLeptonMet]->fill(TVector2::Phi_mpi_pi(leptonPhi - metPhi), wgt, wgtErr);
+        double dPhiGM(TVector2::Phi_mpi_pi(photons.phi[0] - metPhi));
+        double dPhiLM(TVector2::Phi_mpi_pi(leptonPhi - metPhi));
+
+        histograms[kDPhiPhotonMet]->fill(dPhiGM, wgt, wgtErr);
+        histograms[kDPhiLeptonMet]->fill(dPhiLM, wgt, wgtErr);
 
         if(jets.size != 0){
           double minDRGJ(100.);
+          double minDPhiLJ(100.);
           double minDRLJ(100.);
           double ht(0.);
           for(unsigned iJ(0); iJ != jets.size; ++iJ){
             double dRGJ(susy::deltaR(jets.eta[iJ], jets.phi[iJ], photons.eta[0], photons.phi[0]));
+            double dPhiLJ(std::abs(TVector2::Phi_mpi_pi(jets.phi[iJ] - leptonPhi)));
             double dRLJ(susy::deltaR(jets.eta[iJ], jets.phi[iJ], leptonEta, leptonPhi));
             if(dRGJ < minDRGJ) minDRGJ = dRGJ;
+            if(dPhiLJ < minDPhiLJ) minDPhiLJ = dPhiLJ;
             if(dRLJ < minDRLJ) minDRLJ = dRLJ;
             if(jets.pt[iJ] > 30.) ht += jets.pt[iJ];
           }
           histograms[kDRPhotonJet]->fill(minDRGJ, wgt, wgtErr);
           histograms[kDRLeptonJet]->fill(minDRLJ, wgt, wgtErr);
           histograms[kMetOverSqrtHtLowPhotonPt]->fill(met / std::sqrt(ht), wgt, wgtErr);
+          if(met < 70.)
+            histograms[kDPhiLeptonJetLowMet]->fill(minDPhiLJ, wgt, wgtErr);
         }
 
         TLorentzVector pl;
@@ -211,7 +219,7 @@ public:
 
         if(photons.pt[0] < 80.){
           histograms[kMetLowPhotonPt]->fill(met, wgt, wgtErr);
-          histograms[kDRPhotonLeptonLowPhotonPt]->fill(dR, wgt, wgtErr);
+          histograms[kDRPhotonLeptonLowPhotonPt]->fill(dRGL, wgt, wgtErr);
         }
 
         if(met > 120.){
@@ -221,9 +229,12 @@ public:
         }
 
         if(met < 70.){
-          histograms[kDRPhotonLeptonLowMet]->fill(dR, wgt, wgtErr);
+          histograms[kDRPhotonLeptonLowMet]->fill(dRGL, wgt, wgtErr);
           histograms[kPhotonPtLowMet]->fill(photons.pt[0], wgt, wgtErr);
           histograms[kLeptonPtLowMet]->fill(leptonPt, wgt, wgtErr);
+          histograms[kDPhiPhotonMetLowMet]->fill(dPhiGM, wgt, wgtErr);
+          histograms[kDPhiLeptonMetLowMet]->fill(dPhiLM, wgt, wgtErr);
+          histograms[kDPhiPhotonLeptonLowMet]->fill(dPhiGL, wgt, wgtErr);
         }
 
         if(photons.pt[0] < 80. && met < 70.)
