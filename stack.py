@@ -1,5 +1,8 @@
 import ROOT
 
+
+from histogram import HistogramContainer
+
 def drawPave(pave, onRight = True):
     if onRight:
         pave.SetX1NDC(0.72)
@@ -12,19 +15,33 @@ def drawPave(pave, onRight = True):
     pave.SetDrawOption(' ')
 
 
-class Group(object):
+class Group(HistogramContainer):
     OBSERVED = 0
     BACKGROUND = 1
     SIGNAL = 2
 
-    def __init__(self, name, title, color, category):
+    def __init__(self, name, title, color, category, content):
         if category not in [Group.OBSERVED, Group.BACKGROUND, Group.SIGNAL]:
             raise RuntimeError('Invalid category')
+
+        HistogramContainer.__init__(self, name)
             
-        self.name = name
         self.title = title
         self.color = color
         self.category = category
+        self.content = [] #[(sample, factor), ..] factor is most of the case +-1
+        for c in content:
+            if type(c) == tuple:
+                self.content.append(c)
+            else:
+                self.content.append((c, 1.))
+
+    def bookHistograms(self, hdefs, outputFile):
+        HistogramContainer.bookHistograms(self, hdefs, outputFile)
+
+        for hdef in hdefs:
+            for sample, factor in self.content:
+                self.getHistogram(hdef.name).add(sample.getHistogram(hdef.name), factor)
 
 
 class Stack(object):
@@ -53,29 +70,24 @@ class Stack(object):
 
     def addGroup(self, group):
         self.groups.append(group)
-        histogram = self.hdef.generate(group.name)
+        histogram = group.getHistogram(self.name).hWeighted
         histogram.SetLineColor(group.color)
         if group.category == Group.OBSERVED:
             histogram.SetMarkerStyle(8)
             histogram.SetMarkerSize(0.4)
             histogram.SetMarkerColor(group.color)
             histogram.SetFillStyle(0)
+            self.obsHistogram.Add(histogram)
         elif group.category == Group.BACKGROUND:
             histogram.SetFillColor(group.color)
             histogram.SetFillStyle(1001)
+            self.bkgHistogram.Add(histogram)
         if group.category == Group.SIGNAL:
             histogram.SetLineWidth(2)
             histogram.SetFillStyle(0)
 
         self.histograms[group] = histogram
     
-    def add(self, group, h):
-        self.histograms[group].Add(h)
-        if group.category == Group.OBSERVED:
-            self.obsHistogram.Add(h)
-        elif group.category == Group.BACKGROUND:
-            self.bkgHistogram.Add(h)
-
     def draw(self, plotsDir, texts = [], arbitraryUnit = False, maskObserved = False):
         if self.hdef.dimension == 1:
             self.draw1D(plotsDir, texts, arbitraryUnit, maskObserved)
@@ -351,6 +363,6 @@ class Stack(object):
 class StackConfig(object):
     def __init__(self, plotMaker):
         self.plotMaker = plotMaker
-        self.sampleSets = {}
+        self.groups = []
         self.floatFixer = None
         self.specialPlotMakers = {}

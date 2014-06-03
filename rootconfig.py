@@ -9,4 +9,5 @@ if rootlogon:
     ROOT.gROOT.Macro(rootlogon)
 
 ROOT.gROOT.LoadMacro("ROOT/EventProcessor.cc+")
+ROOT.gROOT.LoadMacro('ROOT/histogram.h+')
 ROOT.gROOT.LoadMacro("ROOT/PlotMaker.cc+")

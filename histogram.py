@@ -3,11 +3,13 @@ import array
 import ROOT
 
 class Histogram:
-    ROOT.gROOT.LoadMacro('ROOT/histogram.h+')
-    Core = ROOT.Histogram
-
     def __init__(self, hdef, directory = None, suffix = ''):
         self.hdef = hdef
+
+        if suffix:
+            self.name = self.hdef.name + '_' + suffix
+        else:
+            self.name = self.hdef.name
 
         if not directory:
             self.hWeighted = hdef.generate(suffix)
@@ -15,24 +17,24 @@ class Histogram:
             self.hScaleDown = hdef.generate(suffix + '_ScaleDown')
             self.hRaw = hdef.generate(suffix + '_Raw')
         else:
-            if suffix:
-                name = self.hdef.name + '_' + suffix
-            else:
-                name = self.hdef.name
+            self.hWeighted = directory.Get(self.name)
+            self.hScaleUp = directory.Get(self.name + '_ScaleUp')
+            self.hScaleDown = directory.Get(self.name + '_ScaleDown')
+            self.hRaw = directory.Get(self.name + '_Raw')
 
-            self.name = name
-            self.hWeighted = directory.Get(name)
-            self.hScaleUp = directory.Get(name + '_ScaleUp')
-            self.hScaleDown = directory.Get(name + '_ScaleDown')
-            self.hRaw = directory.Get(name + '_Raw')
-
-        self._core = Histogram.Core(
+        self._core = ROOT.Histogram(
             self.hWeighted,
             self.hScaleUp,
             self.hScaleDown,
             self.hRaw
         )
         self._core.overflowable = self.hdef.overflowable
+
+    def add(self, other, factor = 1.):
+        self.hWeighted.Add(other.hWeighted, factor)
+        self.hScaleUp.Add(other.hScaleUp, factor)
+        self.hScaleDown.Add(other.hScaleDown, factor)
+        self.hRaw.Add(other.hRaw, factor)
 
     def scale(self, scale):
         self.hWeighted.Scale(scale)
@@ -212,3 +214,41 @@ class HDef(object):
             h.GetZaxis().SetTitle(title)
 
         return h
+
+
+class HistogramContainer(object):
+    def __init__(self, name):
+        self.name = name
+        self.histograms = []
+
+    def bookHistograms(self, hdefs, outputFile):
+        self.histograms = []
+        for hdef in hdefs:
+            errIgn = ROOT.gErrorIgnoreLevel
+            ROOT.gErrorIgnoreLevel = 4000
+            if not outputFile.cd(hdef.name):
+                outputFile.mkdir(hdef.name).cd()
+            ROOT.gErrorIgnoreLevel = errIgn
+                
+            self.histograms.append(Histogram(hdef, suffix = self.name))
+
+    def loadHistograms(self, hdefs, sourceFile):
+        self.histograms = []
+        for hdef in hdefs:
+            directory = sourceFile.GetDirectory(hdef.name)
+            self.histograms.append(Histogram(hdef, suffix = self.name, directory = directory))
+
+    def getHistogram(self, name):
+        return next(h for h in self.histograms if h.name == name + '_' + self.name)
+
+    def setHistogramErrors(self):
+        for h in self.histograms:
+            h.setError()
+
+    def scaleHistograms(self, scale):
+        for h in self.histograms:
+            h.scale(scale)
+
+    def postFill(self, applyMask):
+        for h in self.histograms:
+            h.postFill(applyMask)

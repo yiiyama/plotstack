@@ -32,25 +32,25 @@ class MakerWrapper(object):
 
 def fillPlots(config, hdefs, eventListDir, outputPath):
     outputFile = ROOT.TFile.Open(outputPath, 'recreate')
-    
-    for hdef in hdefs:
-        outputFile.mkdir(hdef.name)
 
-    try:
-        obsSamples = next(s for g, s in config.sampleSets if g.category == Group.OBSERVED and s[0].dataset.realData)
-        integratedLumi = max([s.dataset.Leff for s in obsSamples])
-    except StopIteration:
-        integratedLumi = -1.
+    integratedLumi = -1.
+    for group in config.groups:
+        if group.category != Group.OBSERVED: continue
+        for sample, factor in group.content:
+            if sample.dataset.realData:
+                integratedLumi = sample.dataset.Leff
+                break
+        break
 
     groupWeights = {}
     
-    for group, samples in config.sampleSets:
+    for group in config.groups:
         groupWeight = 0.
         groupWeightErr2 = 0.
 
         applyMask = group.category == Group.OBSERVED and plotflags.HIDESENSITIVE
 
-        for sample in samples:
+        for sample, factor in group.content:
             print sample.name
             
             sample.bookHistograms(hdefs, outputFile)
@@ -69,26 +69,26 @@ def fillPlots(config, hdefs, eventListDir, outputPath):
 
             sample.releaseTree()
 
-            groupWeight += weight
-            groupWeightErr2 += weightErr2
+            groupWeight += weight * factor
+            groupWeightErr2 += weightErr2 * abs(factor)
 
             sample.postFill(applyMask)
 
-            if config.floatFixer:
-                if group not in config.floatFixer.floating:
-                    sample.setHistogramErrors()
-                    
-                config.floatFixer.setHistogram(group, sample.histograms)
-
         groupWeights[group] = (groupWeight, groupWeightErr2)
 
+        group.bookHistograms(hdefs, outputFile)
+
+        if config.floatFixer:
+            if group not in config.floatFixer.floating:
+                group.setHistogramErrors()
+                    
+            config.floatFixer.setHistogram(group)
 
     if config.floatFixer:
-        config.floatFixer.calculate()
+        config.floatFixer.calculate(outputFile)
 
         for group, scale in config.floatFixer.scales.items():
-            for sample in next(s for g, s in config.sampleSets if g == group):
-                sample.scaleHistograms(scale)
+            group.scaleHistograms(scale)
     
             weight, weightErr2 = groupWeights[group]
             groupWeights[group] = (weight * scale, weightErr2 * scale)
@@ -99,8 +99,9 @@ def fillPlots(config, hdefs, eventListDir, outputPath):
     ROOT.TObjString('L = ' + str(integratedLumi)).Write()
 
     # release the histograms from the samples before closing the file
-    for group, samples in config.sampleSets:
-        for sample in samples:
+    for group in config.groups:
+        group.histograms = []
+        for sample, factor in group.content:
             sample.histograms = []
     
     outputFile.Close()
@@ -112,7 +113,7 @@ def fillPlots(config, hdefs, eventListDir, outputPath):
 
     print 'Sum of weights'
 
-    for group, samples in config.sampleSets:
+    for group in config.groups:
         weight, weightErr2 = groupWeights[group]
         if group.category == Group.OBSERVED:
             spacer = ' +'
@@ -120,8 +121,11 @@ def fillPlots(config, hdefs, eventListDir, outputPath):
             spacer = ' -'
         else:
             spacer = '  '
-            
-        print spacer + group.name + ':', '%.3e' % weight, '+-', '%.3e' % math.sqrt(weightErr2)
+
+        if weightErr2 < 0.:
+            print 'NEGATIVE WEIGHT ASSIGNED TO', group.name
+        else:
+            print spacer + group.name + ':', '%.3e' % weight, '+-', '%.3e' % math.sqrt(weightErr2)
 
         if group.category == Group.OBSERVED:
             sumObs += weight
@@ -131,7 +135,10 @@ def fillPlots(config, hdefs, eventListDir, outputPath):
             err2Bkg += weightErr2
 
     print "Obs total:", '%.3e' % sumObs, "+-", '%.3e' % math.sqrt(err2Obs)
-    print "Bkg total:", '%.3e' % sumBkg, "+-", '%.3e' % math.sqrt(err2Bkg)
+    if err2Bkg < 0.:
+        print 'NONPHYSICAL BACKGROUND ESTIMATION'
+    else:
+        print "Bkg total:", '%.3e' % sumBkg, "+-", '%.3e' % math.sqrt(err2Bkg)
 
 
 def makeStack(config, hdefs, inputPath, plotsDir):
@@ -167,20 +174,18 @@ def makeStack(config, hdefs, inputPath, plotsDir):
         cmsPave.AddText('CMS Simulation 2014')
         arbitraryUnit = True
 
-    for group, samples in config.sampleSets:
-        for sample in samples:
-            sample.loadHistograms(hdefs, source)
+    for group in config.groups:
+        group.loadHistograms(hdefs, source)
 
     for iH in range(len(hdefs)):
         hdef = hdefs[iH]
 
         stack = Stack(hdef)
 
-        for group, samples in config.sampleSets:
+        for group in config.groups:
             stack.addGroup(group)
-            for sample in samples:
-                stack.add(group, sample.getHistogram(hdef.name).hWeighted)
 
+        print stack.name
         stack.draw(plotsDir, texts = paves, arbitraryUnit = arbitraryUnit, maskObserved = plotflags.HIDESENSITIVE)
     
 
@@ -192,13 +197,13 @@ if __name__ == '__main__':
 
     import rootconfig
     import locations
-    exec('from ' + locations.config + ' import hdefs, stackConfigs')
+    exec('from ' + locations.analysis + '.config import hdefs, stackConfigs')
 
     parser = OptionParser(usage = 'Usage: makeStack.py [options] stackType')
 
     parser.add_option('-s', '--only-stack', action = 'store_true', dest = 'onlyStack', help = 'Only make stack from existing plots file.')
 
-    (options, args) = parser.parse_args()
+    options, args = parser.parse_args()
 
     if len(args) != 1:
         parser.print_usage()

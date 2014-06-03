@@ -7,11 +7,10 @@ class FloatFixer(object):
         if len(floating) == 0:
             raise RuntimeError('No floating component')
         
-        self.plotIndex = -1
         self.floating = floating
         self.scales = dict([(g, 0) for g in floating])
         
-    def setHistogram(self, group, histograms):
+    def setHistogram(self, group):
         pass
 
     def calculate(self):
@@ -24,10 +23,10 @@ class MatrixFixer(FloatFixer):
         self.targets = dict([(g, 0.) for g in self.floating])
         self.integrals = dict([(gc, dict([(gt, 0.) for gt in self.floating])) for gc in self.floating])
 
-    def setHistogram(self, group, histograms):
+    def setHistogram(self, group):
         for g in self.floating:
             calc = self.calculators[g]
-            norm = calc.getNorm(histograms[calc.hIndex].hWeighted)
+            norm = calc.getNorm(group.getHistogram(calc.hName).hWeighted)
         
             if group.category == Group.OBSERVED:
                 self.targets[g] += norm
@@ -58,32 +57,21 @@ class Chi2FitFixer(FloatFixer):
     ROOT.gSystem.Load('libRooFit.so')
     ROOT.gSystem.Load('../../Common/fitting/libCommonFitting.so')
     
-    def __init__(self, floating, index):
+    def __init__(self, floating, hdefs):
         FloatFixer.__init__(self, floating)
-        #index can be an array/tuple of indices too
-        self.plotIndex = index
+        self.hdefs = hdefs
         self.templates = dict([(g, {}) for g in self.floating])
         self.targets = {}
 
-    def setHistogram(self, group, histograms):
-        plots = []
-        try:
-            for index in self.plotIndex:
-                plots.append((histograms[index].hdef, histograms[index].hWeighted))
-        except TypeError:
-            plots.append((histograms[self.plotIndex].hdef, histograms[self.plotIndex].hWeighted))
+    def setHistogram(self, group):
+        plots = [(hdef, group.getHistogram(hdef.name).hWeighted) for hdef in self.hdefs]
         
         if group in self.floating:
-            templates = self.templates[group]
             for hdef, plot in plots:
-                try:
-                    template = templates[hdef.name]
-                except KeyError:
-                    template = hdef.generate('Template_' + group.name)
-                    template.SetDirectory(0)
-                    templates[hdef.name] = template
-                    
+                template = hdef.generate('Template_' + group.name)
+                template.SetDirectory(0)
                 template.Add(plot)
+                self.templates[group][hdef.name] = template
                 
         else:
             for hdef, plot in plots:
@@ -102,7 +90,7 @@ class Chi2FitFixer(FloatFixer):
                 for name, plot in plots:
                     target.Add(plot, factor)
             
-    def calculate(self):
+    def calculate(self, outputFile):
         fitter = ROOT.TemplateChi2Fitter.singleton()
 
         targs = ROOT.TObjArray()
@@ -118,7 +106,32 @@ class Chi2FitFixer(FloatFixer):
                 
             fitter.addTemplate(temps, g.name)
 
-        fitter.fit()
+        fitter.plot(outputFile.mkdir('PreTemplateFit'))
+
+        fitter.initializeScales()
+        for g in self.floating:
+            self.scales[g] = fitter.getScale(g.name)
+
+        nTrial = 0
+
+        while True:
+            fitter.fit()
+
+            nTrial += 1
+
+            if nTrial == 10: break
+    
+            for g in self.floating:
+                if fitter.getScale(g.name) < 0.:
+                    self.scales[g] *= 0.1
+                    fitter.setScale(g.name, self.scales[g])
+                    break
+            else:
+                break
 
         for g in self.floating:
             self.scales[g] = fitter.getScale(g.name)
+
+        fitter.plot(outputFile.mkdir('PostTemplateFit'))
+
+

@@ -6,8 +6,8 @@ def weightEvents(dataset, processorClass, weightCalc, inputDir, outputDir):
     for name in dataset.inputNames:
         processor.addInput(inputDir + '/' + name + '(:?_[0-9]+|).root')
 
-    for c in dataset.samples.keys():
-        processor.setFilter(c, weightCalc[c])
+    for eventClass, sample in dataset.samples.items():
+        processor.setFilter(eventClass, weightCalc[sample])
 
     processor.book()
         
@@ -22,15 +22,37 @@ if __name__ == '__main__':
     import os
     import time
     import subprocess
+    from optparse import OptionParser
 
     import rootconfig
     import locations
-    exec('from ' + locations.config + ' import eventProcessor, datasets, weightCalc')
+    exec('from ' + locations.analysis + '.config import eventProcessor, datasets, weightCalc')
+
+    parser = OptionParser(usage = 'Usage:\n weightEvents.py [options] datasets\n weightEvetns.py -s STACK')
+
+    parser.add_option('-s', '--stack', dest = 'stack', help = 'Process all datasets used in STACK', default = '', metavar = 'STACK')
+
+    options, args = parser.parse_args()
 
     try:
-        datasetNames = sys.argv[1:]
+        if options.stack:
+            exec('from ' + locations.analysis + '.config import stackConfigs')
+            dsList = []
+            for group in stackConfigs[options.stack].groups:
+                for sample, factor in group.content:
+                    dsList.append(sample.dataset)
+    
+            dsList = list(set(dsList))
+        else:
+            dsList = []
+            for name in args:
+                dsList.append(datasets[name])
+
+        if len(dsList) == 0:
+            raise Exception()
+
     except:
-        print 'Usage: weightEvents.py dataset'
+        parser.print_usage()
         sys.exit(1)
 
     try:
@@ -39,9 +61,8 @@ if __name__ == '__main__':
     except KeyError:
         outputDir = locations.eventListDir
 
-    for name in datasetNames:
-        dataset = datasets[name]
-        weightEvents(dataset, eventProcessor, weightCalc[name], locations.sourceDir, outputDir)
+    for ds in dsList:
+        weightEvents(ds, eventProcessor, weightCalc, locations.sourceDir, outputDir)
 
     if outputDir != locations.eventListDir:
         targetDir = locations.eventListDir
