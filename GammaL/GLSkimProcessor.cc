@@ -154,8 +154,8 @@ private:
   bool muonHLT;
 };
 
-GLSkimProcessor::GLSkimProcessor(char const* _datasetName, double _Leff, double _sigmaRelErr2, char const* _outputDir) :
-  EventProcessor(nFilterTypes, _datasetName, _Leff, _sigmaRelErr2, _outputDir),
+GLSkimProcessor::GLSkimProcessor(char const* _datasetName, unsigned _dataType, double _Leff, double _sigmaRelErr2, char const* _outputDir) :
+  EventProcessor(nFilterTypes, _datasetName, _dataType, _Leff, _sigmaRelErr2, _outputDir),
   useElectronFilter(false),
   useMuonFilter(false),
   eventVars(),

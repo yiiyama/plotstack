@@ -20,7 +20,14 @@ public:
 
 class EventProcessor {
 public:
-  EventProcessor(int, char const*, double, double, char const*);
+  enum DataType {
+    kRealData,
+    kFullSim,
+    kFastSim,
+    nDataTypes
+  };
+
+  EventProcessor(int, char const*, unsigned, double, double, char const*);
   virtual ~EventProcessor() {} // ROOT closes files in case of crashes; deleting event list causes double free
 
   void addInput(char const*);
@@ -35,6 +42,7 @@ public:
 
   unsigned nFilters;
   TString datasetName;
+  unsigned dataType;
   double Leff;
   double sigmaRelErr2;
 

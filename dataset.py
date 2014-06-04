@@ -18,12 +18,15 @@ class Dataset(object):
             self._source.Close()
             del self._source
             self.tree = None
-       
 
-    def __init__(self, name, inputNames, realData, Leff, sigmaRelErr, eventClasses):
+    REALDATA = 0
+    FULLSIM = 1
+    FASTSIM = 2
+
+    def __init__(self, name, inputNames, type, Leff, sigmaRelErr, eventClasses):
         self.name = name
         self.inputNames = inputNames
-        self.realData = realData
+        self.type = type
         self.Leff = Leff
         self.sigmaRelErr = sigmaRelErr
 

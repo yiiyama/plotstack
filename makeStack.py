@@ -6,6 +6,7 @@ import math
 import ROOT
 
 import plotflags
+from dataset import Dataset
 from stack import Group, Stack
 
 class MakerWrapper(object):
@@ -37,7 +38,7 @@ def fillPlots(config, hdefs, eventListDir, outputPath):
     for group in config.groups:
         if group.category != Group.OBSERVED: continue
         for sample, factor in group.content:
-            if sample.dataset.realData:
+            if sample.dataset.type == Dataset.REALDATA:
                 integratedLumi = sample.dataset.Leff
                 break
         break

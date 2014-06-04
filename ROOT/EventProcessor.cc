@@ -5,9 +5,10 @@
 
 #include <cmath>
 
-EventProcessor::EventProcessor(int _nFilters, char const* _datasetName, double _Leff, double _sigmaRelErr2, char const* _outputDir) :
+EventProcessor::EventProcessor(int _nFilters, char const* _datasetName, unsigned _dataType, double _Leff, double _sigmaRelErr2, char const* _outputDir) :
   nFilters(_nFilters),
   datasetName(_datasetName),
+  dataType(_dataType),
   Leff(_Leff),
   sigmaRelErr2(_sigmaRelErr2),
   outputDir(_outputDir),

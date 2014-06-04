@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 def weightEvents(dataset, processorClass, weightCalc, inputDir, outputDir):
-    processor = processorClass(dataset.name, dataset.Leff, dataset.sigmaRelErr * dataset.sigmaRelErr, outputDir)
+    processor = processorClass(dataset.name, dataset.type, dataset.Leff, dataset.sigmaRelErr * dataset.sigmaRelErr, outputDir)
 
     for name in dataset.inputNames:
         processor.addInput(inputDir + '/' + name + '(:?_[0-9]+|).root')
