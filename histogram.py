@@ -30,25 +30,11 @@ class Histogram:
         )
         self._core.overflowable = self.hdef.overflowable
 
-    def add(self, other, factor = 1.):
-        self.hWeighted.Add(other.hWeighted, factor)
-        self.hScaleUp.Add(other.hScaleUp, factor)
-        self.hScaleDown.Add(other.hScaleDown, factor)
-        self.hRaw.Add(other.hRaw, factor)
-
-    def scale(self, scale):
-        self.hWeighted.Scale(scale)
-        self.hScaleUp.Scale(scale)
-        self.hScaleDown.Scale(scale)
-
-    def setError(self):
-        for iX in range(1, self.hdef.nx + 1):
-            for iY in range(1, self.hdef.ny + 1):
-                bin = self.hWeighted.GetBin(iX, iY)
-                cont = self.hWeighted.GetBinContent(bin)
-                stat = self.hWeighted.GetBinError(bin)
-                scal = max(self.hScaleUp.GetBinContent(bin) - cont, cont - self.hScaleDown.GetBinContent(bin))
-                self.hWeighted.SetBinError(bin, math.sqrt(stat * stat + scal * scal))
+    def add(self, other, scale = 1.):
+        self.hWeighted.Add(other.hWeighted, scale)
+        self.hScaleUp.Add(other.hScaleUp, scale)
+        self.hScaleDown.Add(other.hScaleDown, scale)
+        self.hRaw.Add(other.hRaw, scale)
 
     def postFill(self, applyMask = False):
         if self.hdef.maskedRegion and applyMask:
@@ -87,7 +73,7 @@ class Histogram:
 
 
 class HDef(object):
-    def __init__(self, name, title, binning, xtitle = '', ytitle = '', overflowable = False, mask = None, logscale = False, drawOption = ''):
+    def __init__(self, name, title, binning, xtitle = '', xlabels = [], ytitle = '', ylabels = [], overflowable = False, mask = None, logscale = False, vrange = None, drawOption = ''):
         self.name = name
         self.title = title
         
@@ -156,10 +142,12 @@ class HDef(object):
 
         self.logscale = logscale
 
+        self.vrange = vrange
+
         self.drawOption = drawOption
 
-        self.xlabels = []
-        self.ylabels = []
+        self.xlabels = xlabels
+        self.ylabels = ylabels
 
     def generate(self, suffix = ''):
         if suffix:
@@ -215,40 +203,3 @@ class HDef(object):
 
         return h
 
-
-class HistogramContainer(object):
-    def __init__(self, name):
-        self.name = name
-        self.histograms = []
-
-    def bookHistograms(self, hdefs, outputFile):
-        self.histograms = []
-        for hdef in hdefs:
-            errIgn = ROOT.gErrorIgnoreLevel
-            ROOT.gErrorIgnoreLevel = 4000
-            if not outputFile.cd(hdef.name):
-                outputFile.mkdir(hdef.name).cd()
-            ROOT.gErrorIgnoreLevel = errIgn
-                
-            self.histograms.append(Histogram(hdef, suffix = self.name))
-
-    def loadHistograms(self, hdefs, sourceFile):
-        self.histograms = []
-        for hdef in hdefs:
-            directory = sourceFile.GetDirectory(hdef.name)
-            self.histograms.append(Histogram(hdef, suffix = self.name, directory = directory))
-
-    def getHistogram(self, name):
-        return next(h for h in self.histograms if h.name == name + '_' + self.name)
-
-    def setHistogramErrors(self):
-        for h in self.histograms:
-            h.setError()
-
-    def scaleHistograms(self, scale):
-        for h in self.histograms:
-            h.scale(scale)
-
-    def postFill(self, applyMask):
-        for h in self.histograms:
-            h.postFill(applyMask)

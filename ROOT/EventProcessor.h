@@ -27,11 +27,11 @@ public:
     nDataTypes
   };
 
-  EventProcessor(int, char const*, unsigned, double, double, char const*);
+  EventProcessor(unsigned, char const*, unsigned, double, double, char const*);
   virtual ~EventProcessor() {} // ROOT closes files in case of crashes; deleting event list causes double free
 
   void addInput(char const*);
-  void setFilter(char const*, EventWeight*);
+  void setOutput(char const*, EventWeight*);
   void book();
   void write();
   void fill(unsigned);
@@ -40,7 +40,6 @@ public:
 
   /* DATASET */
 
-  unsigned nFilters;
   TString datasetName;
   unsigned dataType;
   double Leff;
@@ -49,8 +48,8 @@ public:
   /* CONFIGURATION */
 
   TString outputDir;
-  std::vector<bool> useFilter;
-  std::map<TString, unsigned> filterIndices;
+  std::vector<bool> produceOutput;
+  std::map<TString, unsigned> outputIndices;
 
   /* INPUT / OUTPUT */
 
@@ -62,6 +61,8 @@ public:
   std::vector<TTree*> eventList;
   double eventSigma; // effective cross section per event
   double sigmaErr;
+  double effScale;
+  double scaleErr;
 
   /* UTIL */
 

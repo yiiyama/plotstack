@@ -10,102 +10,91 @@ from dataset import Dataset
 from stack import Group, Stack
 
 class MakerWrapper(object):
-    def __init__(self, core, tree):
+
+    def __init__(self, core):
         self._core = core
-        self._core.eventList = tree
 
-    def run(self, tree, histograms, lumi):
-        for iH in range(len(histograms)):
-            self._core.setHistogram(iH, histograms[iH]._core)
+    def run(self, sample, hdefs, lumi):
+        self._core.setCounter(sample.counter)
 
-        self._core.input = tree
+        iH = 0
+        for hdef in hdefs:
+            self._core.setHistogram(hdef.name, sample.histograms[hdef.name]._core)
+            iH += 1
+
+        self._core.eventList = sample.tree
+
         if lumi > 0.:
             self._core.Lnorm = lumi
         else:
             self._core.Lnorm = 1.
 
-        w = ROOT.Double()
-        e2 = ROOT.Double()
-        self._core.run(w, e2)
+        self._core.run()
 
-        return w, e2
-    
 
-def fillPlots(config, hdefs, eventListDir, outputPath):
-    outputFile = ROOT.TFile.Open(outputPath, 'recreate')
+def fillPlots(config, eventListDir, outputFile, integratedLumi = -1.):
 
-    integratedLumi = -1.
+    if integratedLumi < 0.:
+        try:
+            observed = next(g for g in config.groups if g.category == Group.OBSERVED)
+            integratedLumi = next(s.dataset.Leff for s in observed.samples if s.dataset.type == Dataset.REALDATA)
+        except:
+            pass
+
+    outputDir = outputFile.GetDirectory('components')
+    if not outputDir:
+        outputDir = outputFile.mkdir('components')
+
     for group in config.groups:
-        if group.category != Group.OBSERVED: continue
-        for sample, factor in group.content:
-            if sample.dataset.type == Dataset.REALDATA:
-                integratedLumi = sample.dataset.Leff
-                break
-        break
-
-    groupWeights = {}
-    
-    for group in config.groups:
-        groupWeight = 0.
-        groupWeightErr2 = 0.
-
         applyMask = group.category == Group.OBSERVED and plotflags.HIDESENSITIVE
 
-        for sample, factor in group.content:
+        for sample in group.samples:
             print sample.name
             
-            sample.bookHistograms(hdefs, outputFile)
+            sample.bookHistograms(config.hdefs, outputDir)
 
             sample.loadTree(eventListDir)
 
             try:
-                plotMaker = MakerWrapper(config.specialPlotMakers[sample], sample.tree)
+                plotMaker = MakerWrapper(config.specialPlotMakers[sample])
             except KeyError:
                 try:
-                    plotMaker = MakerWrapper(config.specialPlotMakers[group], sample.tree)
+                    plotMaker = MakerWrapper(config.specialPlotMakers[group])
                 except KeyError:
-                    plotMaker = MakerWrapper(config.plotMaker, sample.tree)
+                    plotMaker = MakerWrapper(config.plotMaker)
 
-            weight, weightErr2 = plotMaker.run(sample.tree, sample.histograms, integratedLumi)
+            plotMaker.run(sample, config.hdefs, integratedLumi)
 
             sample.releaseTree()
 
-            groupWeight += weight * factor
-            groupWeightErr2 += weightErr2 * abs(factor)
+            for h in sample.histograms.values():
+                h.postFill(applyMask)
 
-            sample.postFill(applyMask)
-
-        groupWeights[group] = (groupWeight, groupWeightErr2)
-
-        group.bookHistograms(hdefs, outputFile)
-
-        if config.floatFixer:
-            if group not in config.floatFixer.floating:
-                group.setHistogramErrors()
-                    
-            config.floatFixer.setHistogram(group)
-
-    if config.floatFixer:
-        config.floatFixer.calculate(outputFile)
-
-        for group, scale in config.floatFixer.scales.items():
-            group.scaleHistograms(scale)
-    
-            weight, weightErr2 = groupWeights[group]
-            groupWeights[group] = (weight * scale, weightErr2 * scale)
-
-    outputFile.cd()
-    outputFile.Write()
-
+    outputDir.cd()
+    outputDir.Write()
     ROOT.TObjString('L = ' + str(integratedLumi)).Write()
 
-    # release the histograms from the samples before closing the file
+
+def formGroups(config, outputFile, printResult = False):
+
+    componentsDir = outputFile.GetDirectory('components')
     for group in config.groups:
-        group.histograms = []
-        for sample, factor in group.content:
-            sample.histograms = []
+        for sample in group.samples:
+            sample.loadHistograms(config.hdefs, componentsDir)
     
-    outputFile.Close()
+    config.scalePlots(outputFile)
+
+    groupsDir = outputFile.GetDirectory('groups')
+    if not groupsDir:
+        groupsDir = outputFile.mkdir('groups')
+
+    for group in config.groups:
+        group.bookHistograms(config.hdefs, groupsDir)
+
+    groupsDir.cd()
+    groupsDir.Write()
+
+    if not printResult: return
 
     sumObs = 0.
     err2Obs = 0.
@@ -115,7 +104,6 @@ def fillPlots(config, hdefs, eventListDir, outputPath):
     print 'Sum of weights'
 
     for group in config.groups:
-        weight, weightErr2 = groupWeights[group]
         if group.category == Group.OBSERVED:
             spacer = ' +'
         elif group.category == Group.BACKGROUND:
@@ -123,52 +111,53 @@ def fillPlots(config, hdefs, eventListDir, outputPath):
         else:
             spacer = '  '
 
-        if weightErr2 < 0.:
-            print 'NEGATIVE WEIGHT ASSIGNED TO', group.name
+        weight = group.counter.GetBinContent(1)
+        statErr = group.counter.GetBinError(1)
+        scaleErr = group.counter.GetBinContent(2) / weight
+        entries = int(group.counter.GetBinContent(3))
+        if group.counter.GetBinContent(2) == 0.:
+            print spacer + group.name + ':', '%.3e +- %.3e (%d entries)' % (weight, statErr, entries)
         else:
-            print spacer + group.name + ':', '%.3e' % weight, '+-', '%.3e' % math.sqrt(weightErr2)
+            print spacer + group.name + ':', '(%.3e +- %.3e) * (1 +- %.2f) (%d entries)' % (weight, statErr, scaleErr, entries)
 
         if group.category == Group.OBSERVED:
             sumObs += weight
-            err2Obs += weightErr2
+            err2Obs += statErr * statErr
         if group.category == Group.BACKGROUND:
             sumBkg += weight
-            err2Bkg += weightErr2
+            err2Bkg += statErr * statErr + scaleErr * scaleErr * weight * weight
 
     print "Obs total:", '%.3e' % sumObs, "+-", '%.3e' % math.sqrt(err2Obs)
-    if err2Bkg < 0.:
-        print 'NONPHYSICAL BACKGROUND ESTIMATION'
-    else:
-        print "Bkg total:", '%.3e' % sumBkg, "+-", '%.3e' % math.sqrt(err2Bkg)
+    print "Bkg total:", '%.3e' % sumBkg, "+-", '%.3e' % math.sqrt(err2Bkg)
 
 
-def makeStack(config, hdefs, inputPath, plotsDir):
-    source = ROOT.TFile.Open(inputPath)
-
-    keys = source.GetListOfKeys()
+def makeStack(config, source, plotsDir):
+    ROOT.gErrorIgnoreLevel = 2000
+    
+    keys = source.GetDirectory('components').GetListOfKeys()
     for key in keys:
         if key.GetName().startswith('L = '):
             integratedLumi = float(key.GetName().split()[2])
 
     paves = []
     cmsPave = ROOT.TPaveText()
-    cmsPave.SetY2NDC(0.04)
+    cmsPave.SetY2NDC(0.045)
     cmsPave.SetTextFont(62)
     cmsPave.SetTextSize(0.03)
-    cmsPave.SetTextAlign(13)
+    cmsPave.SetTextAlign(12)
     cmsPave.SetBorderSize(0)
     cmsPave.SetFillStyle(0)
     paves.append(cmsPave)
     if integratedLumi > 0.: 
         cmsPave.AddText('CMS Preliminary 2014')
         lumiPave = ROOT.TPaveText()
-        lumiPave.SetY2NDC(0.06)
+        lumiPave.SetY2NDC(0.045)
         lumiPave.SetTextFont(62)
         lumiPave.SetTextSize(0.03)
-        lumiPave.SetTextAlign(13)
+        lumiPave.SetTextAlign(12)
         lumiPave.SetBorderSize(0)
         lumiPave.SetFillStyle(0)
-        lumiPave.AddText('#int#it{L}dt = %.1f pb^{-1}' % integratedLumi)
+        lumiPave.AddText('L = %.1f fb^{-1}' % (integratedLumi / 1000.))
         paves.append(lumiPave)
         arbitraryUnit = False
     else:
@@ -176,18 +165,16 @@ def makeStack(config, hdefs, inputPath, plotsDir):
         arbitraryUnit = True
 
     for group in config.groups:
-        group.loadHistograms(hdefs, source)
+        group.loadHistograms(config.hdefs, source.GetDirectory('groups'))
 
-    for iH in range(len(hdefs)):
-        hdef = hdefs[iH]
-
+    for hdef in config.hdefs:
         stack = Stack(hdef)
 
         for group in config.groups:
             stack.addGroup(group)
 
         print stack.name
-        stack.draw(plotsDir, texts = paves, arbitraryUnit = arbitraryUnit, maskObserved = plotflags.HIDESENSITIVE)
+        stack.draw(plotsDir, texts = paves, arbitraryUnit = arbitraryUnit, maskObserved = plotflags.HIDESENSITIVE, drawEmpty = plotflags.DRAWEMPTY)
     
 
 if __name__ == '__main__':
@@ -198,11 +185,14 @@ if __name__ == '__main__':
 
     import rootconfig
     import locations
-    exec('from ' + locations.analysis + '.config import hdefs, stackConfigs')
+    exec('from ' + locations.analysis + '.config import stackConfigs')
 
     parser = OptionParser(usage = 'Usage: makeStack.py [options] stackType')
 
-    parser.add_option('-s', '--only-stack', action = 'store_true', dest = 'onlyStack', help = 'Only make stack from existing plots file.')
+    parser.add_option('-i', '--input', dest = 'histoSource', help = 'Use pre-filled histogram file. Implies -g')
+    parser.add_option('-g', '--form-group', action = 'store_true', dest = 'formGroup', help = 'Form group plots from existing component histograms.')
+    parser.add_option('-s', '--only-stack', action = 'store_true', dest = 'onlyStack', help = 'Only make stack from existing group histograms.')
+    parser.add_option('-f', '--set-flags', dest = 'setFlags', help = 'Set plot flags.')
 
     options, args = parser.parse_args()
 
@@ -210,18 +200,60 @@ if __name__ == '__main__':
         parser.print_usage()
         sys.exit(1)
 
-    stackType = args[0]
-    config = stackConfigs[stackType]
+    if options.setFlags:
+        for stmt in options.setFlags.split():
+            exec('plotflags.' + stmt)
+        
+    stackName = args[0]
+    config = stackConfigs[stackName]
 
-    rootFileName = locations.plotsOutputDir + '/' + stackType + '.root'
+    if options.histoSource:
+        def copyDir(sourceDir, targetDir):
+            keys = sourceDir.GetListOfKeys()
+            for key in keys:
+                obj = key.ReadObj()
+                if obj.InheritsFrom(ROOT.TDirectory.Class()):
+                    targ = targetDir.mkdir(obj.GetName())
+                    copyDir(obj, targ)
+                elif obj.InheritsFrom(ROOT.TTree.Class()):
+                    targetDir.cd()
+                    tree = obj.CloneTree(-1, 'fast')
+                    tree.Write()
+                else:
+                    try:
+                        obj.SetDirectory(targetDir)
+                    except AttributeError:
+                        pass
+                    targetDir.cd()
+                    obj.Write()
+                    
 
-    if not options.onlyStack:
-        fillPlots(config, hdefs, locations.eventListDir, rootFileName)
+        source = ROOT.TFile.Open(locations.plotsOutputDir + '/' + options.histoSource + '.root')
+        if not source:
+            raise IOError('Histogram input not found')
 
+        outputFile = ROOT.TFile.Open(locations.plotsOutputDir + '/' + stackName + '.root', 'recreate')
+        copyDir(source.GetDirectory('components'), outputFile.mkdir('components'))
+
+        outputFile.Close()
+
+        options.formGroup = True
+        
     try:
-        os.makedirs(locations.plotsDir + '/' + stackType)
+        os.makedirs(locations.plotsDir + '/' + stackName)
     except OSError:
         pass
 
-    makeStack(config, hdefs, rootFileName, locations.plotsDir + '/' + stackType)
+    if not options.onlyStack:
+        if not options.formGroup:
+            outputFile = ROOT.TFile.Open(locations.plotsOutputDir + '/' + stackName + '.root', 'recreate')
+            fillPlots(config, locations.eventListDir, outputFile)
+            outputFile.Close()
 
+        outputFile = ROOT.TFile.Open(locations.plotsOutputDir + '/' + stackName + '.root', 'update')
+        formGroups(config, outputFile, printResult = True)
+        outputFile.Close()
+
+    source = ROOT.TFile.Open(locations.plotsOutputDir + '/' + stackName + '.root')
+    makeStack(config, source, locations.plotsDir + '/' + stackName)
+    source.Close()
