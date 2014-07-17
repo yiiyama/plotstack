@@ -84,23 +84,21 @@ datasets['WWMC'] = fullsim('WWMC', 10000431. / 56., 0.5, ('ElePhotonAndElectron'
 
 eventWeights = {}
 eventWeights['default'] = ROOT.GLEventWeight()
-eventWeights['eg'] = ROOT.ElePhotonFunctionalWeight()
+eventWeights['egHLT'] = ROOT.ElePhotonFunctionalWeight()
+eventWeights['eg'] = ROOT.ElePhotonFunctionalWeight(True)
 eventWeights['jgHLT'] = ROOT.JetPhotonHLTIsoWeight()
 eventWeights['jg'] = ROOT.JetPhotonWeight()
-eventWeights['mceg'] = ROOT.MCElePhotonFunctionalWeight()
+eventWeights['mcegHLT'] = ROOT.MCElePhotonFunctionalWeight()
+eventWeights['mceg'] = ROOT.MCElePhotonFunctionalWeight(True)
 eventWeights['mcjgHLT'] = ROOT.MCJetPhotonHLTIsoWeight()
 eventWeights['mcjg'] = ROOT.MCJetPhotonWeight()
 
 ### EXPORTED ###
 weightCalc = {
     datasets['DataE'].PhotonAndElectron: eventWeights['default'],
-    datasets['DataE'].ElePhotonAndElectron: eventWeights['eg'],
+    datasets['DataE'].ElePhotonAndElectron: eventWeights['egHLT'],
     datasets['DataE'].FakePhotonAndElectron: eventWeights['jgHLT'],
     datasets['DataE'].PhotonAndFakeElectron: eventWeights['default'],
-    datasets['DataEA'].PhotonAndElectron: eventWeights['default'],
-    datasets['DataEA'].ElePhotonAndElectron: eventWeights['eg'],
-    datasets['DataEA'].FakePhotonAndElectron: eventWeights['jgHLT'],
-    datasets['DataEA'].PhotonAndFakeElectron: eventWeights['default'],
     datasets['DataM'].PhotonAndMuon: eventWeights['default'],
     datasets['DataM'].ElePhotonAndMuon: eventWeights['eg'],
     datasets['DataM'].FakePhotonAndMuon: eventWeights['jg'],
@@ -111,7 +109,7 @@ weightCalc = {
 }
 
 for name in ['WGToLNuG_PtG-30-50', 'WGToLNuG_PtG-50-130', 'WGToLNuG_PtG-130', 'ZGToLLG_PtG-5-130', 'ZGToLLG_PtG-130', 'WWGJets', 'TTGJets', 'WW', 'TTJetsSemiLept', 'TTJetsFullLept', 'T5wg_1000_425']:
-    weightCalc[datasets[name].ElePhotonAndElectron] = eventWeights['eg']
+    weightCalc[datasets[name].ElePhotonAndElectron] = eventWeights['egHLT']
     weightCalc[datasets[name].ElePhotonAndMuon] = eventWeights['eg']
     weightCalc[datasets[name].ElePhotonAndDimuon] = eventWeights['eg']
     weightCalc[datasets[name].FakePhotonAndElectron] = eventWeights['jgHLT']
@@ -122,7 +120,7 @@ weightCalcMC = {
     'PhotonAndMuon': eventWeights['default'],
     'PhotonAndFakeElectron': eventWeights['default'],
     'PhotonAndFakeMuon': eventWeights['default'],
-    'ElePhotonAndElectron': eventWeights['mceg'],
+    'ElePhotonAndElectron': eventWeights['mcegHLT'],
     'ElePhotonAndMuon': eventWeights['mceg'],
     'FakePhotonAndElectron': eventWeights['mcjgHLT'],
     'FakePhotonAndMuon': eventWeights['mcjg'],

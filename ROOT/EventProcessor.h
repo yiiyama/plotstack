@@ -31,11 +31,11 @@ public:
   EventProcessor(unsigned, char const*, unsigned, double, double, char const*);
   virtual ~EventProcessor() {} // ROOT closes files in case of crashes; deleting event list causes double free
 
-  void addInput(char const*);
-  void setOutput(char const*, EventWeight*);
-  void book();
-  void write();
-  void fill(unsigned);
+  virtual void addInput(char const*);
+  virtual void setOutput(char const*, EventWeight*);
+  virtual void book();
+  virtual void write();
+  virtual void fill(unsigned);
 
   virtual void process() {}
 
