@@ -161,7 +161,7 @@ class HDef(object):
             xedges = array.array('d', self.xedges)
 
         if self.dimension == 1:
-            h = ROOT.TH1F(name, self.title, len(xedges) - 1, xedges)
+            h = ROOT.TH1D(name, self.title, len(xedges) - 1, xedges)
 
         else:
             if self.overflowable:
@@ -169,7 +169,7 @@ class HDef(object):
             else:
                 yedges = array.array('d', self.yedges)
 
-            h = ROOT.TH2F(name, self.title, len(xedges) - 1, xedges, len(yedges) - 1, yedges)
+            h = ROOT.TH2D(name, self.title, len(xedges) - 1, xedges, len(yedges) - 1, yedges)
         
         h.GetXaxis().SetTitle(self.xtitle)
         h.GetYaxis().SetTitle(self.ytitle)

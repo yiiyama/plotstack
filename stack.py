@@ -2,6 +2,7 @@ import math
 import ROOT
 
 from dataset import Dataset
+from plotflags import USESIGNIFICANCE
 
 def drawPave(pave, onRight = True):
     if onRight:
@@ -82,8 +83,6 @@ class Group(object):
 
 class Stack(object):
 
-    USESIGNIFICANCE = True
-    
     def __init__(self, hdef):
         self.name = hdef.name
         self.hdef = hdef
@@ -184,12 +183,7 @@ class Stack(object):
 
         if not self.hdef.vrange:
             if self.hdef.logscale:
-                minContent = self.bkgHistogram.GetMaximum()
-                for iX in range(1, self.bkgHistogram.GetNbinsX() + 1):
-                    cont = self.bkgHistogram.GetBinContent(iX)
-                    if cont > 0. and cont < minContent:
-                        minContent = cont
-                stack.SetMinimum(minContent * 0.2)
+                stack.SetMinimum(self.bkgHistogram.GetMinimum(0.) * 0.2)
             else:
                 stack.SetMinimum(0.)
     
@@ -289,7 +283,7 @@ class Stack(object):
 
         ratioPad.cd()
 
-        if Stack.USESIGNIFICANCE:
+        if USESIGNIFICANCE:
             hDiff = self.obsHistogram.Clone(self.name + '_diff')
 
             for iX in range(1, self.hdef.nx + 1):

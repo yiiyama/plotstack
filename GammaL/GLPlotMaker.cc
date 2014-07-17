@@ -5,7 +5,6 @@
 #include "../../CommonCode/ObjectTree.h"
 #include "../../CommonCode/Utilities.h"
 #include "../ROOT/PlotMaker.h"
-#include "plots.h"
 
 #include <cmath>
 #include <iostream>
@@ -16,8 +15,17 @@ public:
   int matchPhoton;
   int matchLepton;
   bool vetoZ;
+  bool dilepton;
+  bool effCorrection;
 
-  GLPlotMaker(int f) : PlotMaker(nPlots), leptonFlavor(f), matchPhoton(0), matchLepton(0), vetoZ(leptonFlavor == 0)
+  GLPlotMaker(int f) :
+    PlotMaker(),
+    leptonFlavor(f),
+    matchPhoton(0),
+    matchLepton(0),
+    vetoZ(leptonFlavor == 0),
+    dilepton(false),
+    effCorrection(true)
   {
   }
 
@@ -29,12 +37,11 @@ public:
   void matchTrueLepton() { matchLepton = 1; }
   void vetoTrueLepton() { matchLepton = -1; }
   void useZ() { vetoZ = false; }
+  void dileptonOnly() { dilepton = true; }
+  void noEffCorrection() { effCorrection = false; }
 
-  void run(double& _sumW, double& _sumWE2)
+  void run()
   {
-    _sumW = 0.;
-    _sumWE2 = 0.;
-
     /////////////////////////
     //// OPEN EVENT LIST ////
     /////////////////////////
@@ -50,35 +57,62 @@ public:
     float puWeight(0.);
     double eventSigma(0.);
     double sigmaErr(0.);
+    double effScale(1.);
+    double scaleErr(0.);
     susy::PhotonVarsArray photons;
     bool photon_matchGen[susy::NMAX];
     bool photon_matchGenE[susy::NMAX];
-    susy::ElectronVarsArray electrons;
-    susy::MuonVarsArray muons;
+    unsigned lepton_size;
+    float lepton_pt[susy::NMAX];
+    float lepton_eta[susy::NMAX];
+    float lepton_phi[susy::NMAX];
+    float lepton_px[susy::NMAX];
+    float lepton_py[susy::NMAX];
+    float lepton_pz[susy::NMAX];
+    float lepton_energy[susy::NMAX];
     bool lepton_matchGen[susy::NMAX];
     susy::JetVarsArray jets;
     float mass2(0.);
     float mass3(0.);
+    unsigned char nVtx(0);
     eventList->SetBranchAddress("met", &met);
     eventList->SetBranchAddress("metPhi", &metPhi);
     eventList->SetBranchAddress("mt", &mt);
     eventList->SetBranchAddress("puWeight", &puWeight);
     eventList->SetBranchAddress("eventSigma", &eventSigma);
     eventList->SetBranchAddress("sigmaErr", &sigmaErr);
+    eventList->SetBranchAddress("effScale", &effScale);
+    eventList->SetBranchAddress("scaleErr", &scaleErr);
     photons.setAddress(*eventList);
     eventList->SetBranchAddress("photon.matchGen", photon_matchGen);
     eventList->SetBranchAddress("photon.matchGenE", photon_matchGenE);
     if(leptonFlavor == 0){
-      electrons.setAddress(*eventList);
+      eventList->SetBranchAddress("electron.size", &lepton_size);
+      eventList->SetBranchAddress("electron.pt", lepton_pt);
+      eventList->SetBranchAddress("electron.eta", lepton_eta);
+      eventList->SetBranchAddress("electron.phi", lepton_phi);
+      eventList->SetBranchAddress("electron.px", lepton_px);
+      eventList->SetBranchAddress("electron.py", lepton_py);
+      eventList->SetBranchAddress("electron.pz", lepton_pz);
+      eventList->SetBranchAddress("electron.energy", lepton_energy);
       eventList->SetBranchAddress("electron.matchGen", lepton_matchGen);
     }
     else{
-      muons.setAddress(*eventList);
+      eventList->SetBranchAddress("muon.size", &lepton_size);
+      eventList->SetBranchAddress("muon.pt", lepton_pt);
+      eventList->SetBranchAddress("muon.eta", lepton_eta);
+      eventList->SetBranchAddress("muon.phi", lepton_phi);
+      eventList->SetBranchAddress("muon.px", lepton_px);
+      eventList->SetBranchAddress("muon.py", lepton_py);
+      eventList->SetBranchAddress("muon.pz", lepton_pz);
+      eventList->SetBranchAddress("muon.energy", lepton_energy);
+      eventList->SetBranchAddress("muon.matchGen", lepton_matchGen);
       eventList->SetBranchAddress("muon.matchGen", lepton_matchGen);
     }
     jets.setAddress(*eventList);
     eventList->SetBranchAddress("mass2", &mass2);
     eventList->SetBranchAddress("mass3", &mass3);
+    eventList->SetBranchAddress("nVtx", &nVtx);
 
 #ifdef WGME
     WGammaIntegral integrator("/afs/cern.ch/user/y/yiiyama/src/GammaL/wgme/MG5/Cards/param_card.dat");
@@ -90,12 +124,10 @@ public:
 
     try{
 
-      double sumDW(0.);
-
       long iEntry(0);
       while(eventList->GetEntry(iEntry++)){
-        if(vetoZ && leptonFlavor == 0 && mass2 > 86. && mass2 < 96.) continue;
-        
+        if(dilepton && lepton_size < 2) continue;
+
         switch(matchPhoton){
         case 22:
           if(!photon_matchGen[0]) continue;
@@ -123,125 +155,172 @@ public:
           break;
         }
 
-        double wgt(eventSigma * Lnorm * puWeight);
-        double wgtErr(sigmaErr * Lnorm * puWeight);
-
-        unsigned leptonSize(0);
-        double leptonPt(0.);
-        double leptonEta(0.);
-        double leptonPhi(0.);
-        if(leptonFlavor == 0){
-          leptonSize = electrons.size;
-          leptonPt = electrons.pt[0];
-          leptonEta = electrons.eta[0];
-          leptonPhi = electrons.phi[0];
-        }
-        else{
-          leptonSize = muons.size;
-          leptonPt = muons.pt[0];
-          leptonEta = muons.eta[0];
-          leptonPhi = muons.phi[0];
+        if(dilepton){
+          switch(matchLepton){
+          case 1:
+            if(!lepton_matchGen[1]) continue;
+            break;
+          case -1:
+            if(lepton_matchGen[1]) continue;
+            break;
+          }
         }
 
-        histograms[kNPhoton]->fill(photons.size, wgt, wgtErr);
-        histograms[kNLepton]->fill(leptonSize, wgt, wgtErr);
-        histograms[kNPhotonNLepton]->fill(photons.size, leptonSize, wgt, wgtErr);
-        histograms[kNJet]->fill(jets.size, wgt, wgtErr);
-        histograms[kMass2]->fill(mass2, wgt, wgtErr);
-        histograms[kMass2Wide]->fill(mass2, wgt, wgtErr);
-        histograms[kMass3]->fill(mass3, wgt, wgtErr);
-        histograms[kMass3Wide]->fill(mass3, wgt, wgtErr);
-        histograms[kPhotonPt]->fill(photons.pt[0], wgt, wgtErr);
-        histograms[kPhotonEta]->fill(photons.eta[0], wgt, wgtErr);
-        histograms[kLeptonPt]->fill(leptonPt, wgt, wgtErr);
-        histograms[kLeptonEta]->fill(leptonEta, wgt, wgtErr);
-        histograms[kMet]->fill(met, wgt, wgtErr);
-        histograms[kMt]->fill(mt, wgt, wgtErr);
-        histograms[kMetMt]->fill(met, mt, wgt, wgtErr);
+        eventWeight = eventSigma * Lnorm * puWeight;
+        double wgtRelErr2(sigmaErr * sigmaErr / eventSigma / eventSigma);
+        if(effCorrection){
+          eventWeight *= effScale;
+          wgtRelErr2 += scaleErr * scaleErr / effScale / effScale;
+        }
+        eventWeightErr = eventWeight * std::sqrt(wgtRelErr2);
 
-        double dEtaGL(photons.eta[0] - leptonEta);
-        double dPhiGL(TVector2::Phi_mpi_pi(photons.phi[0] - leptonPhi));
-        histograms[kDEtaPhotonLepton]->fill(dEtaGL, wgt, wgtErr);
-        histograms[kDPhiPhotonLepton]->fill(dPhiGL, wgt, wgtErr);
+        fill("Mass2", mass2);
+        fill("Mass2Wide", mass2);
+
+        if(vetoZ && leptonFlavor == 0 && mass2 > 86. && mass2 < 96.) continue;
+
+        countEvent();
+
+        fill("NPhoton", photons.size);
+        fill("NLepton", lepton_size);
+        fill("NPhotonNLepton", photons.size, lepton_size);
+        fill("Mass3", mass3);
+        fill("Mass3Wide", mass3);
+        fill("PhotonPt", photons.pt[0]);
+        fill("PhotonEta", photons.eta[0]);
+        fill("LeptonPt", lepton_pt[0]);
+        fill("LeptonEta", lepton_eta[0]);
+        fill("Met", met);
+        fill("Mt", mt);
+        fill("MetMt", met, mt);
+        fill("NVtx", nVtx);
+
+        double mll(0.);
+        if(lepton_size == 2){
+          mll = (TLorentzVector(lepton_px[0], lepton_py[0], lepton_pz[0], lepton_energy[0]) +
+                 TLorentzVector(lepton_px[1], lepton_py[1], lepton_pz[1], lepton_energy[1])).M();
+          fill("Mll", mll);
+        }
+
+        double dEtaGL(photons.eta[0] - lepton_eta[0]);
+        fill("DEtaPhotonLepton", dEtaGL);
+
+        double dPhiGL(TVector2::Phi_mpi_pi(photons.phi[0] - lepton_phi[0]));
+        fill("DPhiPhotonLepton", dPhiGL);
+
+        if(mll > 81. && mll < 101.)
+          fill("DPhiPhotonLeptonOnZ", dPhiGL);
 
         double dRGL(std::sqrt(dEtaGL * dEtaGL + dPhiGL * dPhiGL));
-        histograms[kDRPhotonLepton]->fill(dRGL, wgt, wgtErr);
+        fill("DRPhotonLepton", dRGL);
 
         double dPhiGM(TVector2::Phi_mpi_pi(photons.phi[0] - metPhi));
-        double dPhiLM(TVector2::Phi_mpi_pi(leptonPhi - metPhi));
+        fill("DPhiPhotonMet", dPhiGM);
 
-        histograms[kDPhiPhotonMet]->fill(dPhiGM, wgt, wgtErr);
-        histograms[kDPhiLeptonMet]->fill(dPhiLM, wgt, wgtErr);
+        double dPhiLM(TVector2::Phi_mpi_pi(lepton_phi[0] - metPhi));
+        fill("DPhiLeptonMet", dPhiLM);
 
+        unsigned nJet(0);
+	double ht(0.);
         if(jets.size != 0){
           double minDRGJ(100.);
-          double minDPhiLJ(100.);
+          int iMinGJ(-1);
           double minDRLJ(100.);
-          double ht(0.);
+          int iMinLJ(-1);
           for(unsigned iJ(0); iJ != jets.size; ++iJ){
             double dRGJ(susy::deltaR(jets.eta[iJ], jets.phi[iJ], photons.eta[0], photons.phi[0]));
-            double dPhiLJ(std::abs(TVector2::Phi_mpi_pi(jets.phi[iJ] - leptonPhi)));
-            double dRLJ(susy::deltaR(jets.eta[iJ], jets.phi[iJ], leptonEta, leptonPhi));
-            if(dRGJ < minDRGJ) minDRGJ = dRGJ;
-            if(dPhiLJ < minDPhiLJ) minDPhiLJ = dPhiLJ;
-            if(dRLJ < minDRLJ) minDRLJ = dRLJ;
-            if(jets.pt[iJ] > 30.) ht += jets.pt[iJ];
+            double dRLJ(susy::deltaR(jets.eta[iJ], jets.phi[iJ], lepton_eta[0], lepton_phi[0]));
+            if(dRGJ < minDRGJ){
+              minDRGJ = dRGJ;
+              iMinGJ = iJ;
+            }
+            if(dRLJ < minDRLJ){
+              minDRLJ = dRLJ;
+              iMinLJ = iJ;
+            }
+
+            if(jets.pt[iJ] > 30.){
+              ht += jets.pt[iJ];
+              ++nJet;
+            }
           }
-          histograms[kDRPhotonJet]->fill(minDRGJ, wgt, wgtErr);
-          histograms[kDRLeptonJet]->fill(minDRLJ, wgt, wgtErr);
-          histograms[kMetOverSqrtHtLowPhotonPt]->fill(met / std::sqrt(ht), wgt, wgtErr);
-          if(met < 70.)
-            histograms[kDPhiLeptonJetLowMet]->fill(minDPhiLJ, wgt, wgtErr);
+
+          if(iMinGJ != -1){
+            fill("DPhiPhotonJet", TVector2::Phi_mpi_pi(photons.phi[0] - jets.phi[iMinGJ]));
+            fill("DEtaPhotonJet", photons.eta[0] - jets.eta[iMinGJ]);
+            fill("DRPhotonJet", minDRGJ);
+          }
+          if(iMinLJ != -1){
+            fill("DPhiLeptonJet", TVector2::Phi_mpi_pi(lepton_phi[0] - jets.phi[iMinLJ]));
+            fill("DEtaLeptonJet", lepton_eta[0] - jets.eta[iMinLJ]);
+            fill("DRLeptonJet", minDRLJ);
+          }
         }
 
+        fill("NJet", nJet);
+	fill("Ht", ht);
+
         TLorentzVector pl;
-        pl.SetPtEtaPhiM(leptonPt, leptonEta, leptonPhi, 0.);
+        pl.SetPtEtaPhiM(lepton_pt[0], lepton_eta[0], lepton_phi[0], 0.);
         TVector2 metV;
         metV.SetMagPhi(met, metPhi);
         double mu2(80.385 * 80.385 + 2. * (pl.X() * metV.X() + pl.Y() * metV.Y()));
-        double mm(mu2 * mu2 - 4. * leptonPt * leptonPt * met * met);
+        double mm(mu2 * mu2 - 4. * lepton_pt[0] * lepton_pt[0] * met * met);
         if(mm >= 0.){
           double PS(pl.P() * std::sqrt(mm));
           double pw(std::min(TVector3(pl.X() + metV.X(), pl.Y() + metV.Y(), pl.Z() + (pl.Z() * mu2 - PS) / 2 / pl.Perp2()).Mag(),
                              TVector3(pl.X() + metV.X(), pl.Y() + metV.Y(), pl.Z() + (pl.Z() * mu2 + PS) / 2 / pl.Perp2()).Mag()));
-          histograms[kPW]->fill(pw, wgt, wgtErr);
+          fill("PW", pw);
 
-          if(pw < 200.) histograms[kMetLowPW]->fill(met, wgt, wgtErr);
+          if(pw < 200.) fill("MetLowPW", met);
         }
         else{
           TLorentzVector pnu;
           pnu.SetPtEtaPhiM(met, 0., metPhi, 0.);
-          histograms[kMW]->fill((pl + pnu).M(), wgt, wgtErr);
-        }
-
-        if(photons.pt[0] > 180.)
-          histograms[kMetHighPhotonPt]->fill(met, wgt, wgtErr);
-
-        if(photons.pt[0] < 80.){
-          histograms[kMetLowPhotonPt]->fill(met, wgt, wgtErr);
-          histograms[kDRPhotonLeptonLowPhotonPt]->fill(dRGL, wgt, wgtErr);
+          fill("MW", (pl + pnu).M());
         }
 
         if(met > 120.){
-          histograms[kMtHighMet]->fill(mt, wgt, wgtErr);
-          histograms[kPhotonPtHighMet]->fill(photons.pt[0], wgt, wgtErr);
-          histograms[kLeptonPtHighMet]->fill(leptonPt, wgt, wgtErr);
+          fill("PhotonPtHighMet", photons.pt[0]);
+          fill("LeptonPtHighMet", lepton_pt[0]);
         }
 
         if(met < 70.){
-          histograms[kDRPhotonLeptonLowMet]->fill(dRGL, wgt, wgtErr);
-          histograms[kPhotonPtLowMet]->fill(photons.pt[0], wgt, wgtErr);
-          histograms[kLeptonPtLowMet]->fill(leptonPt, wgt, wgtErr);
-          histograms[kDPhiPhotonMetLowMet]->fill(dPhiGM, wgt, wgtErr);
-          histograms[kDPhiLeptonMetLowMet]->fill(dPhiLM, wgt, wgtErr);
-          histograms[kDPhiPhotonLeptonLowMet]->fill(dPhiGL, wgt, wgtErr);
+          fill("PhotonPtLowMet", photons.pt[0]);
+          fill("PhotonPtZoomLowMet", photons.pt[0]);
+          fill("LeptonPtLowMet", lepton_pt[0]);
+          fill("NJetLowMet", jets.size);
+
+          if(lepton_size == 1){
+            fill("DRPhotonLeptonLowMet1L", dRGL);
+            fill("DPhiLeptonMetLowMet1L", dPhiLM);
+          }
+          else if(mll > 81. && mll < 101.)
+            fill("PhotonPtLowMetOnZ", photons.pt[0]);
+
+          if(dilepton){
+            fill("Mass3LowMet", mass3);
+            fill("MuonPtLowMet", lepton_pt[0]);
+            fill("MuonPtLowMet", lepton_pt[1]);
+          }
         }
 
-        if(photons.pt[0] < 80. && met < 70.)
-          histograms[kMtLowMetLowPhotonPt]->fill(mt, wgt, wgtErr);
-
-        if(mt > 140.)
-          histograms[kMetHighMt]->fill(met, wgt, wgtErr);
+        if(photons.pt[0] < 80.){
+          if(mt > 100.) fill("MetHighMtLowPhotonPt", met);
+          if(mt < 100.) fill("MetLowMtLowPhotonPt", met);
+	  if(met < 70.){
+	    fill("MtLowMetLowPhotonPt", mt);
+	    fill("HtLowMetLowPhotonPt", ht);
+	  }
+        }
+        else{
+          if(mt > 100.) fill("MetHighMtHighPhotonPt", met);
+	  if(met > 120.){
+	    fill("MtHighMetHighPhotonPt", mt);
+	    if(mt > 100.)
+	      fill("HtHighMtHighMetHighPhotonPt", ht);
+	  }
+        }
 
 #ifdef WGME
         if(jets.size == 0 && photons.size == 1 && leptonSize == 1){
@@ -249,21 +328,15 @@ public:
           TLorentzVector pL;
 
           pG.SetPtEtaPhiM(photons.pt[0], photons.eta[0], photons.phi[0], 0.);
-          pL.SetPtEtaPhiM(leptonPt, leptonEta, leptonPhi, 0.);
+          pL.SetPtEtaPhiM(lepton_pt[0], lepton_eta[0], lepton_phi[0], 0.);
 
           double nlw(-std::log(integrator.integrate(pL, pG, metV, true)));
-          histograms[kNLW]->fill(nlw, wgt, wgtErr);
+          fill("NLW", nlw);
           if(met > 120.)
-            histograms[kNLWHighMet]->fill(nlw, wgt, wgtErr);
+            fill("NLWHighMet", nlw);
         }
 #endif
-
-        _sumW += wgt;
-        _sumWE2 += wgt * wgt;
-        sumDW += wgtErr;
       }
-
-      _sumWE2 += sumDW * sumDW;
     }
     catch(std::exception &ex){
       std::cerr << ex.what() << std::endl;

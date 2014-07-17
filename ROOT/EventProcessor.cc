@@ -60,6 +60,7 @@ EventProcessor::book()
     if(!produceOutput[fItr->second]) continue;
 
     TFile::Open(outputDir + "/" + datasetName + "_" + fItr->first + ".root", "recreate");
+    TObjString(weightCalc[fItr->second]->name).Write();
     
     eventList[fItr->second] = new TTree("eventList", "Event List");
     eventList[fItr->second]->SetAutoSave(10000000);

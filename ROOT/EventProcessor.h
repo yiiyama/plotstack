@@ -10,11 +10,12 @@
 
 class EventWeight {
 public:
+  TString name;
   double weight;
   double relErr;
 
-  EventWeight() : weight(1.), relErr(0.) {}
-  EventWeight(double _w, double _r) : weight(_w), relErr(_r) {}
+  EventWeight() : name(""), weight(1.), relErr(0.) {}
+  EventWeight(TString const& _name, double _w, double _r) : name(_name), weight(_w), relErr(_r) {}
   virtual ~EventWeight() {}
 };
 

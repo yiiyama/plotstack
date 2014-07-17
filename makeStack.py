@@ -113,7 +113,10 @@ def formGroups(config, outputFile, printResult = False):
 
         weight = group.counter.GetBinContent(1)
         statErr = group.counter.GetBinError(1)
-        scaleErr = group.counter.GetBinContent(2) / weight
+        if weight > 0.:
+            scaleErr = group.counter.GetBinContent(2) / weight
+        else:
+            scaelErr = 0.
         entries = int(group.counter.GetBinContent(3))
         if group.counter.GetBinContent(2) == 0.:
             print spacer + group.name + ':', '%.3e +- %.3e (%d entries)' % (weight, statErr, entries)
@@ -189,10 +192,11 @@ if __name__ == '__main__':
 
     parser = OptionParser(usage = 'Usage: makeStack.py [options] stackType')
 
-    parser.add_option('-i', '--input', dest = 'histoSource', help = 'Use pre-filled histogram file. Implies -g')
+    parser.add_option('-i', '--input', dest = 'histoSource', default = '', help = 'Use pre-filled histogram file. Implies -g')
     parser.add_option('-g', '--form-group', action = 'store_true', dest = 'formGroup', help = 'Form group plots from existing component histograms.')
     parser.add_option('-s', '--only-stack', action = 'store_true', dest = 'onlyStack', help = 'Only make stack from existing group histograms.')
-    parser.add_option('-f', '--set-flags', dest = 'setFlags', help = 'Set plot flags.')
+    parser.add_option('-f', '--set-flags', dest = 'setFlags', default = '', help = 'Set plot flags.')
+    parser.add_option('-L', '--integrated-lumi', dest = 'integratedLumi', default = -1., help = 'Integrated luminosity to normalize to in 1/pb.')
 
     options, args = parser.parse_args()
 
@@ -247,7 +251,7 @@ if __name__ == '__main__':
     if not options.onlyStack:
         if not options.formGroup:
             outputFile = ROOT.TFile.Open(locations.plotsOutputDir + '/' + stackName + '.root', 'recreate')
-            fillPlots(config, locations.eventListDir, outputFile)
+            fillPlots(config, locations.eventListDir, outputFile, options.integratedLumi)
             outputFile.Close()
 
         outputFile = ROOT.TFile.Open(locations.plotsOutputDir + '/' + stackName + '.root', 'update')
