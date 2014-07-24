@@ -4,6 +4,7 @@ import os
 import math
 
 import ROOT
+import rootconfig
 
 import plotflags
 from dataset import Dataset
@@ -37,7 +38,7 @@ def fillPlots(config, eventListDir, outputFile, integratedLumi = -1.):
     if integratedLumi < 0.:
         try:
             observed = next(g for g in config.groups if g.category == Group.OBSERVED)
-            integratedLumi = next(s.dataset.Leff for s in observed.samples if s.dataset.type == Dataset.REALDATA)
+            integratedLumi = next(s.dataset.Leff for s in observed.samples if s.dataset.dataType == Dataset.REALDATA)
         except:
             pass
 
@@ -67,8 +68,7 @@ def fillPlots(config, eventListDir, outputFile, integratedLumi = -1.):
 
             sample.releaseTree()
 
-            for h in sample.histograms.values():
-                h.postFill(applyMask)
+            sample.postFillHistograms(applyMask)
 
     outputDir.cd()
     outputDir.Write()
@@ -186,7 +186,6 @@ if __name__ == '__main__':
     import os
     from optparse import OptionParser
 
-    import rootconfig
     import locations
     exec('from ' + locations.analysis + '.config import stackConfigs')
 
@@ -251,7 +250,7 @@ if __name__ == '__main__':
     if not options.onlyStack:
         if not options.formGroup:
             outputFile = ROOT.TFile.Open(locations.plotsOutputDir + '/' + stackName + '.root', 'recreate')
-            fillPlots(config, locations.eventListDir, outputFile, options.integratedLumi)
+            fillPlots(config, locations.eventListDir, outputFile, float(options.integratedLumi))
             outputFile.Close()
 
         outputFile = ROOT.TFile.Open(locations.plotsOutputDir + '/' + stackName + '.root', 'update')

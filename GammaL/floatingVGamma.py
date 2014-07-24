@@ -28,8 +28,6 @@ class FloatingVGammaSearch(StackConfig):
         observed = self.tempDef.generate(suffix = 'observed')
         fakeHistograms = dict([(gname, Histogram(self.tempDef, suffix = gname)) for gname in fakeGroups])
         vgHistogram = Histogram(self.tempDef, suffix = 'vg')
-        vgFakeHistograms = dict([('vg' + cname, Histogram(self.tempDef, suffix = cname)) for cname in fakeClasses])
-        vgQCDHistogram = Histogram(self.tempDef, suffix = 'vgContam')
         qcdHistogram = Histogram(self.tempDef, suffix = 'qcd')
 
         for sample in groups['Observed'].samples:
@@ -39,13 +37,8 @@ class FloatingVGammaSearch(StackConfig):
         for gname in fakeGroups:
             for sample in groups[gname].samples:
                 fakeHistograms[gname].add(sample.histograms[self.tempDef.name])
-        for sample in groups['VGamma'].samples:
-            if sample.eventClass == candClass:
-                vgHistogram.add(sample.histograms[self.tempDef.name])
-            elif sample.eventClass != jlClass:
-                vgFakeHistograms['vg' + sample.eventClass].add(sample.histograms[self.tempDef.name])
-            else:
-                vgQCDHistogram.add(sample.histograms[self.tempDef.name])
+        for sample in groups['VGamma'].getSamples(candClass):
+            vgHistogram.add(sample.histograms[self.tempDef.name])
         for sample in groups['JLFake'].samples:
             qcdHistogram.add(sample.histograms[self.tempDef.name])
 
@@ -55,23 +48,16 @@ class FloatingVGammaSearch(StackConfig):
         
         vgScale = ROOT.RooRealVar('vg', 'vg', 1., -ROOT.RooNumber.infinity(), ROOT.RooNumber.infinity())
         qcdScale = ROOT.RooRealVar('qcd', 'qcd', 1., -ROOT.RooNumber.infinity(), ROOT.RooNumber.infinity())
-        vgQCDScale = ROOT.RooFormulaVar('vgQCDScale', 'vgQCDScale', '-1. * @0 * @1', ROOT.RooArgList(vgScale, qcdScale))
 
         target = observed.Clone('target')
         for histo in fakeHistograms.values():
             target.Add(histo.hWeighted, -1.)
 
-        vgTemplate = vgHistogram.hWeighted.Clone('vgTemplate')
-        for histo in vgFakeHistograms.values():
-            vgTemplate.Add(histo.hWeighted, -1.)
-
         fitter.setTarget(target)
-        fitter.addTemplate(vgTemplate, 'vg', vgScale)
+        fitter.addTemplate(vgHistogram.hWeighted, 'vg', vgScale)
         fitter.addTemplate(qcdHistogram.hWeighted, 'qcd', qcdScale)
-        fitter.addTemplate(vgQCDHistogram.hWeighted, 'vgQCD', vgQCDScale)
 
         target.Delete()
-        vgTemplate.Delete()
 
         directory = outputDir.GetDirectory('PreTemplateFit')
         if not directory:
@@ -147,10 +133,6 @@ class FloatingVGammaSearch(StackConfig):
             target.Add(jgTemplate, -1.)
 
             vgTemplate = modifyTemplate(vgHistogram, effScaleVar, 'vg')
-            vgEGTemplate = modifyTemplate(vgFakeHistograms['vgElePhotonAnd' + self.lepton], egScaleVar, 'vgEGFake')
-            vgJGTemplate = modifyTemplate(vgFakeHistograms['vgFakePhotonAnd' + self.lepton], jgScaleVar, 'vgJGFake')
-            vgTemplate.Add(vgEGTemplate, -1.)
-            vgTemplate.Add(vgJGTemplate, -1.)
 
             for iX in range(self.tempDef.nx):
                 targetContents[iX] = target.GetBinContent(iX + 1)
@@ -161,14 +143,11 @@ class FloatingVGammaSearch(StackConfig):
             fitter.setTarget(target)
             fitter.addTemplate(vgTemplate, 'vg', vgScale)
             fitter.addTemplate(qcdHistogram.hWeighted, 'qcd', qcdScale)
-            fitter.addTemplate(vgQCDHistogram.hWeighted, 'vgQCD', vgQCDScale)
 
             target.Delete()
             egTemplate.Delete()
             jgTemplate.Delete()
             vgTemplate.Delete()
-            vgEGTemplate.Delete()
-            vgJGTemplate.Delete()
 
             if fitter.fit(-1) != 0: continue
 
@@ -205,7 +184,7 @@ class FloatingVGammaSearch(StackConfig):
 
         ### SET SCALES AND ERRORS
 
-        for sample in groups['VGamma'].samples:
+        for sample in groups['VGamma'].getSamples(candClass):
             count = sample.counter.GetBinContent(1)
 #            scaleError = max(vgErrHigh, vgErrLow)
 #            scaleHigh = vgCentral + vgErrHigh
@@ -214,34 +193,13 @@ class FloatingVGammaSearch(StackConfig):
             scaleHigh = vgCentral + vgCentralErr
             scaleLow = vgCentral - vgCentralErr
 
-            if sample.eventClass == candClass:
-                for histogram in sample.histograms.values():
-                    histogram.hWeighted.Scale(vgCentral)
-                    histogram.hScaleUp.Scale(scaleHigh)
-                    histogram.hScaleDown.Scale(scaleLow)
+            for histogram in sample.histograms.values():
+                histogram.hWeighted.Scale(vgCentral)
+                histogram.hScaleUp.Scale(scaleHigh)
+                histogram.hScaleDown.Scale(scaleLow)
 
-                sample.counter.SetBinContent(1, count * vgCentral)
-                sample.counter.SetBinContent(2, count * scaleError)
-
-            elif sample.eventClass != jlClass:
-                for histogram in sample.histograms.values():
-                    histogram.hWeighted.Scale(-vgCentral)
-                    histogram.hScaleUp.Scale(-scaleHigh)
-                    histogram.hScaleDown.Scale(-scaleLow)
-
-                sample.counter.SetBinContent(1, -count * vgCentral)
-                sample.counter.SetBinContent(2, -count * scaleError)
-                sample.counter.SetBinContent(3, 0.)
-
-            else:
-                for histogram in sample.histograms.values():
-                    histogram.hWeighted.Scale(-vgCentral * qcdCentral)
-                    histogram.hScaleUp.Scale(-scaleHigh * qcdCentral)
-                    histogram.hScaleDown.Scale(-scaleLow * qcdCentral)
-
-                sample.counter.SetBinContent(1, -count * vgCentral * qcdCentral)
-                sample.counter.SetBinContent(2, -count * scaleError * qcdCentral)
-                sample.counter.SetBinContent(3, 0.)
+            sample.counter.SetBinContent(1, count * vgCentral)
+            sample.counter.SetBinContent(2, count * scaleError)
 
         for sample in groups['JLFake'].samples:
             for histogram in sample.histograms.values():

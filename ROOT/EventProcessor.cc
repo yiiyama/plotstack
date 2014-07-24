@@ -5,11 +5,8 @@
 
 #include <cmath>
 
-EventProcessor::EventProcessor(unsigned _nOutputs, char const* _datasetName, unsigned _dataType, double _Leff, double _sigmaRelErr2, char const* _outputDir) :
-  datasetName(_datasetName),
-  dataType(_dataType),
-  Leff(_Leff),
-  sigmaRelErr2(_sigmaRelErr2),
+EventProcessor::EventProcessor(unsigned _nOutputs, Dataset const* _dataset, char const* _outputDir) :
+  dataset(*_dataset),
   outputDir(_outputDir),
   produceOutput(_nOutputs, false),
   outputIndices(),
@@ -59,7 +56,10 @@ EventProcessor::book()
   for(std::map<TString, unsigned>::iterator fItr(outputIndices.begin()); fItr != outputIndices.end(); ++fItr){
     if(!produceOutput[fItr->second]) continue;
 
-    TFile::Open(outputDir + "/" + datasetName + "_" + fItr->first + ".root", "recreate");
+    TString outputName(outputDir + "/" + dataset.name + "_" + fItr->first);
+    if(dataset.prescale != 1) outputName += TString::Format("_ps%d", dataset.prescale);
+    outputName += ".root";
+    TFile::Open(outputName, "recreate");
     TObjString(weightCalc[fItr->second]->name).Write();
     
     eventList[fItr->second] = new TTree("eventList", "Event List");
@@ -89,8 +89,8 @@ EventProcessor::write()
 void
 EventProcessor::fill(unsigned _iF)
 {
-  eventSigma = weightCalc[_iF]->weight / Leff;
-  sigmaErr = eventSigma * std::sqrt(weightCalc[_iF]->relErr * weightCalc[_iF]->relErr + sigmaRelErr2);
+  eventSigma = weightCalc[_iF]->weight / dataset.Leff;
+  sigmaErr = eventSigma * std::sqrt(weightCalc[_iF]->relErr * weightCalc[_iF]->relErr + dataset.sigmaRelErr2);
 
   eventList[_iF]->Fill();
 }

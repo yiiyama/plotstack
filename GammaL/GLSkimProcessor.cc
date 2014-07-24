@@ -76,7 +76,7 @@ public:
 
 class GLSkimProcessor : public EventProcessor {
 public:
-  GLSkimProcessor(char const*, unsigned, double, double, char const*);
+  GLSkimProcessor(Dataset const*, char const*);
   ~GLSkimProcessor() {} // ROOT closes files in case of crashes; deleting event list causes double free
 
   void process();
@@ -192,8 +192,8 @@ private:
   TH1* hlteffTable[4];
 };
 
-GLSkimProcessor::GLSkimProcessor(char const* _datasetName, unsigned _dataType, double _Leff, double _sigmaRelErr2, char const* _outputDir) :
-  EventProcessor(nOutputTypes, _datasetName, _dataType, _Leff, _sigmaRelErr2, _outputDir),
+GLSkimProcessor::GLSkimProcessor(Dataset const* _dataset, char const* _outputDir) :
+  EventProcessor(nOutputTypes, _dataset, _outputDir),
   useElectronFilter(false),
   useMuonFilter(false),
   eventVars(),
@@ -435,7 +435,7 @@ GLSkimProcessor::process()
 
   if(produceOutput[oPhotonAndElectron] || produceOutput[oPhotonAndMuon] || produceOutput[oPhotonAndDimuon]){
 
-    if(dataType != kRealData){
+    if(dataset.dataType != Dataset::kRealData){
       TFile* idSFSource(TFile::Open("/afs/cern.ch/user/y/yiiyama/output/GammaL/main/idEfficiency/scalefactors.root"));
       if(!idSFSource)
         throw std::runtime_error("ID SF source not available");
@@ -480,9 +480,9 @@ GLSkimProcessor::process()
       delete hltSFSource;
 
       TString effSourceName;
-      if(datasetName.Contains("WG") || datasetName.Contains("WW")) effSourceName = "WGToLNuG";
-      else if(datasetName.Contains("ZG") || datasetName.Contains("DY")) effSourceName = "ZGToLLG";
-      else if(datasetName.Contains("TT") || datasetName.Contains("T5wg")) effSourceName = "TTGJets";
+      if(dataset.name.Contains("WG") || dataset.name.Contains("WW") || dataset.name.Contains("WJets")) effSourceName = "WGToLNuG";
+      else if(dataset.name.Contains("ZG") || dataset.name.Contains("DY")) effSourceName = "ZGToLLG";
+      else if(dataset.name.Contains("TT") || dataset.name.Contains("T5wg")) effSourceName = "TTGJets";
       else throw std::logic_error("Efficiency table missing");
 
       std::cout << "Using efficiency source " << effSourceName << std::endl;
@@ -534,12 +534,14 @@ GLSkimProcessor::process()
   //// START LOOP ////
   ////////////////////
 
-  std::cout << "Processing " << datasetName << std::endl;
+  std::cout << "Processing " << dataset.name << std::endl;
 
   long iEntry(0);
-  while(filterTree.GetEntry(iEntry++) > 0){
+  long nIncrements(0);
+  while(filterTree.GetEntry(iEntry) > 0){
     try{
-      if(iEntry % 1000 == 1) (std::cout << "\r" << iEntry).flush();
+      if(nIncrements++ % 1000 == 0) (std::cout << "\r" << iEntry).flush();
+      iEntry += dataset.prescale;
 
       if(!(elHLT && ((PhotonAndElectron && produceOutput[oPhotonAndElectron]) ||
                      (ElePhotonAndElectron && produceOutput[oElePhotonAndElectron]) ||
@@ -551,8 +553,8 @@ GLSkimProcessor::process()
                      (PhotonAndFakeMuon && produceOutput[oPhotonAndFakeMuon])))) continue;
 
 
-      eventTree.GetEntry(iEntry - 1);
-      objectTree.GetEntry(iEntry - 1);
+      eventTree.GetEntry(iEntry - dataset.prescale);
+      objectTree.GetEntry(iEntry - dataset.prescale);
 
       if(!preprocess()) continue;
 
@@ -633,7 +635,7 @@ GLSkimProcessor::preprocess()
     photon_muonIso[iP] = iL == muons.size;
   }
 
-  if(dataType != kRealData){
+  if(dataset.dataType != Dataset::kRealData){
     unsigned photonIndex[susy::NMAX];
     unsigned electronIndex[susy::NMAX];
     unsigned muonIndex[susy::NMAX];
@@ -1464,27 +1466,40 @@ GLSkimProcessor::getValueFromTable(double& _val, double& _err, TH1 const& _table
   _err = _table.GetBinError(bin);
 }
 
-class MCJetPhotonHLTIsoWeight : public GLEventWeight {
+class MCJetPhotonWeight : public GLEventWeight {
 public:
-  MCJetPhotonHLTIsoWeight() : GLEventWeight("MCJetPhotonHLTIsoWeight")
+  MCJetPhotonWeight(int _lepton) :
+    GLEventWeight("MCJetPhotonHLTIsoWeight"),
+    tfact_(0)
   {
-    TFile* source(TFile::Open("/afs/cern.ch/user/y/yiiyama/output/GammaL/jetGammaFake/jetGammaMC_el.root"));
+    TFile* source(0);
+    if(_lepton == 0)
+      source = TFile::Open("/afs/cern.ch/user/y/yiiyama/output/GammaL/jetGammaFake/jetGammaMC_el.root");
+    else
+      source = TFile::Open("/afs/cern.ch/user/y/yiiyama/output/GammaL/jetGammaFake/jetGammaMC_mu.root");
     if(!source)
-      throw std::runtime_error("MCJetPhotonHLTIsoWeight source not found");
-    TH1D* hFake(static_cast<TH1D*>(source->Get("hFakePt")));
-    TH1D* hProxy(static_cast<TH1D*>(source->Get("hProxyPt")));
-    int low(hFake->FindFixBin(40.));
-    double fakeErr;
-    double fake(hFake->IntegralAndError(low, hFake->GetNbinsX(), fakeErr));
-    double proxyErr;
-    double proxy(hProxy->IntegralAndError(low, hProxy->GetNbinsX(), proxyErr));
-
+      throw std::runtime_error("MCJetPhotonWeight source not found");
+    tfact_ = static_cast<TH1D*>(source->Get("tfactTrue"));
+    tfact_->SetDirectory(0);
     delete source;
-
-    weight = fake / proxy;
-    relErr = std::sqrt(std::pow(fakeErr / fake, 2.) + std::pow(proxyErr / proxy, 2.));
   }
-  ~MCJetPhotonHLTIsoWeight() {}
+  ~MCJetPhotonWeight()
+  {
+    delete tfact_;
+  }
+
+  void setPhoton(susy::PhotonVars const& _photon, susy::VertexVarsArray const&, susy::SimpleEventProducer::EventVars const&)
+  {
+    int iBin(tfact_->FindFixBin(_photon.pt));
+    if(iBin == 0) iBin = 1;
+    else if(iBin > tfact_->GetNbinsX()) iBin = tfact_->GetNbinsX();
+    
+    weight = tfact_->GetBinContent(iBin);
+    relErr = tfact_->GetBinError(iBin) / weight;
+  }
+
+private:
+  TH1D* tfact_;
 };
 
 class JetPhotonHLTIsoWeight : public GLEventWeight {
@@ -1493,33 +1508,9 @@ public:
   ~JetPhotonHLTIsoWeight() {}
   void setPhoton(susy::PhotonVars const& _photon, susy::VertexVarsArray const&, susy::SimpleEventProducer::EventVars const&)
   {
-    weight = (8.39 * std::exp(-_photon.pt / 21.1) + 0.0498 * std::exp(_photon.pt / 87.8)) / (1. + 30.1 * std::exp(-_photon.pt / 16.6));
-    relErr = 0.25; // nonclosure + emul-match + 10% on data measurement
+    weight = (5.21 * std::exp(-_photon.pt / 23.8) + 0.0414 * std::exp(_photon.pt / 83.1)) / (1. + 30.5 * std::exp(-_photon.pt / 16.4));
+    relErr = (1.e-2 * _photon.pt - 0.26) * 1.25; // transfer factor error (by eye) * normalized nonclosure
   }
-};
-
-class MCJetPhotonWeight : public GLEventWeight {
-public:
-  MCJetPhotonWeight() :
-    GLEventWeight("MCJetPhotonWeight")
-  {
-    TFile* source(TFile::Open("/afs/cern.ch/user/y/yiiyama/output/GammaL/jetGammaFake/jetGammaMC_mu.root"));
-    if(!source)
-      throw std::runtime_error("MCJetPhotonWeight source not found");
-    TH1D* hFake(static_cast<TH1D*>(source->Get("hFakePt")));
-    TH1D* hProxy(static_cast<TH1D*>(source->Get("hProxyPt")));
-    int low(hFake->FindFixBin(40.));
-    double fakeErr;
-    double fake(hFake->IntegralAndError(low, hFake->GetNbinsX(), fakeErr));
-    double proxyErr;
-    double proxy(hProxy->IntegralAndError(low, hProxy->GetNbinsX(), proxyErr));
-
-    delete source;
-
-    weight = fake / proxy;
-    relErr = std::sqrt(std::pow(fakeErr / fake, 2.) + std::pow(proxyErr / proxy, 2.));
-  }
-  ~MCJetPhotonWeight() {}
 };
 
 class JetPhotonWeight : public GLEventWeight {
@@ -1529,7 +1520,7 @@ public:
   void setPhoton(susy::PhotonVars const& _photon, susy::VertexVarsArray const&, susy::SimpleEventProducer::EventVars const&)
   {
     weight = (28.0 * std::exp(-_photon.pt / 14.0) + 0.461 * std::exp(-_photon.pt / 681.)) / (1. + 42.1 * std::exp(-_photon.pt / 13.7));
-    relErr = 0.11; // nonclosure + 10% on data measurement
+    relErr = (1.e-2 * _photon.pt - 0.26) * 1.33; // transfer factor error (by eye) * normalized nonclosure
   }
 };
 
@@ -1539,22 +1530,19 @@ public:
   ~MCElePhotonFunctionalWeight() {}
   void setPhoton(susy::PhotonVars const& _photon, susy::VertexVarsArray const& _vertices, susy::SimpleEventProducer::EventVars const&)
   {
-    unsigned nV(0);
+    unsigned nVtx(0);
     int iPV(-1);
     for(unsigned iV(0); iV != _vertices.size; ++iV){
       if(!_vertices.isGood[iV]) continue;
       if(iPV < 0) iPV = iV;
-      ++nV;
+      ++nVtx;
     }
-    double ineff(0.00133962);
-    if(muCorr_) ineff *= 1.;
+    double ineff(0.00143056);
+    if(muCorr_) ineff = 0.0017645;
 
-    double fakerate(1. - (1. - ineff) * (1. - std::pow(1.053e+00 * _photon.pt + 1., -1.612e+00)) * (1. - 1.903e-01 * std::exp(-3.939e-01 * _vertices.nTracks[iPV])) * (1. - 1.311e-04 * nV));
+    double fakerate(1. - (1. - ineff) * (1. - std::pow(1.051e+00 * _photon.pt + 1., -1.613e+00)) * (1. - 1.903e-01 * std::exp(-3.940e-01 * _vertices.nTracks[iPV])) * (1. - 1.312e-04 * nVtx));
     weight = fakerate / (1. - fakerate);
-    if(muCorr_)
-      relErr = 0.;
-    else
-      relErr = 0.047;
+    relErr = 0.050;
   }
 
 private:
@@ -1567,58 +1555,21 @@ public:
   ~ElePhotonFunctionalWeight() {}
   void setPhoton(susy::PhotonVars const& _photon, susy::VertexVarsArray const& _vertices, susy::SimpleEventProducer::EventVars const&)
   {
-    unsigned nV(0);
+    unsigned nVtx(0);
     int iPV(-1);
     for(unsigned iV(0); iV != _vertices.size; ++iV){
       if(!_vertices.isGood[iV]) continue;
       if(iPV < 0) iPV = iV;
-      ++nV;
+      ++nVtx;
     }
-    double ineff(0.00167252);
-    if(muCorr_) ineff *= 1.;
+    double ineff(0.0019387);
+    if(muCorr_) ineff = 0.002344;
 
-    double fakerate(1. - (1. - ineff) * (1. - std::pow(9.635e-02 * _photon.pt + 1., -4.150e+00)) * (1. - 1.552e-01 * std::exp(-3.073e-01 * _vertices.nTracks[iPV])) * (1. - 3.140e-04 * nV));
+    double fakerate(1. - (1. - ineff) * (1. - std::pow(7.094e-02 * _photon.pt + 1., -4.945e+00)) * (1. - 1.427e-01 * std::exp(-2.961e-01 * _vertices.nTracks[iPV])) * (1. - 3.149e-04 * nVtx));
     weight = fakerate / (1. - fakerate);
-    if(muCorr_)
-      relErr = 0.;
-    else
-      relErr = 0.091;
+    relErr = 0.14;
   }
 
 private:
   bool muCorr_;
-};
-
-class JetElectronBinnedWeight : public GLEventWeight {
-public:
-  JetElectronBinnedWeight() :
-    GLEventWeight("JetElectronBinnedWeight")
-  {
-    source_ = TFile::Open("/afs/cern.ch/user/y/yiiyama/output/GammaL/jetEFake/scTrackMatchingFit.root");
-    if(!source_ || source_->IsZombie()){
-      delete source_;
-      throw std::runtime_error("PhotonAndFakeElectron sources not found");
-    }
-
-    source_->GetObject("h_scales_pt_eta0", h_[0]);
-    source_->GetObject("h_scales_pt_eta1", h_[1]);
-  }
-  ~JetElectronBinnedWeight()
-  {
-    delete source_;
-  }
-  void setElectron(susy::ElectronVars const& _electron, susy::VertexVarsArray const&, susy::SimpleEventProducer::EventVars const&)
-  {
-    // P(SID) / P(PID) binned in Pt
-
-    int bin(h_[_electron.iSubdet]->FindFixBin(_electron.pt));
-    if(bin > h_[_electron.iSubdet]->GetNbinsX()) bin = h_[_electron.iSubdet]->GetNbinsX();
-
-    weight = h_[_electron.iSubdet]->GetBinContent(bin);
-    relErr = h_[_electron.iSubdet]->GetBinError(bin) / weight;
-  }
-
-private:
-  TFile* source_;
-  TH1* h_[2];
 };

@@ -4,7 +4,7 @@
 #include "TTree.h"
 #include "TH1.h"
 
-#include "histogram.h"
+#include "Histogram.h"
 
 #include <map>
 

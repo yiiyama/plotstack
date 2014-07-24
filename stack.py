@@ -80,6 +80,9 @@ class Group(object):
             directory = sourceDir.GetDirectory(hdef.name)
             self.histograms[hdef.name] = directory.Get(hdef.name + '_' + self.name)
 
+    def getSamples(self, eventClass):
+        return [s for s in self.samples if s.eventClass == eventClass]
+
 
 class Stack(object):
 

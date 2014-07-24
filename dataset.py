@@ -17,7 +17,10 @@ class Dataset(object):
             self.histograms = {}
     
         def loadTree(self, inputDir):
-            self._source = ROOT.TFile.Open(inputDir + '/' + self.name + '.root')
+            fileName = self.name
+            if self.dataset.prescale != 1: fileName += '_ps%d' % self.dataset.prescale
+            fileName += '.root'
+            self._source = ROOT.TFile.Open(inputDir + '/' + fileName)
             self.tree = self._source.Get('eventList')
 
         def releaseTree(self):
@@ -51,21 +54,32 @@ class Dataset(object):
                 directory = sourceDir.GetDirectory(hdef.name)
                 self.histograms[hdef.name]= Histogram(hdef, suffix = self.name, directory = directory)
 
+        def postFillHistograms(self, applyMask = False):
+            for iBin in [1, 2]:
+                self.counter.SetBinContent(iBin, self.counter.GetBinContent(iBin) * self.dataset.prescale)
 
-    REALDATA = 0
-    FULLSIM = 1
-    FASTSIM = 2
+            for h in self.histograms.values():
+                h.scale(self.dataset.prescale)
+                h.postFill(applyMask)
 
-    def __init__(self, name, inputNames, type, Leff, sigmaRelErr, eventClasses):
+    REALDATA = ROOT.Dataset.kRealData
+    FULLSIM = ROOT.Dataset.kFullSim
+    FASTSIM = ROOT.Dataset.kFastSim
+
+    def __init__(self, name, inputNames, dataType, Leff, sigmaRelErr, eventClasses, prescale = 1):
         self.name = name
         self.inputNames = inputNames
-        self.type = type
+        self.dataType = dataType
         self.Leff = Leff
         self.sigmaRelErr = sigmaRelErr
+        self.prescale = prescale
 
         self.samples = {}
         for c in eventClasses:
             sample = Dataset.Sample(self, c)
             self.samples[c] = sample
             setattr(self, c, sample)
+        
+    def cppObject(self):
+        return ROOT.Dataset(self.name, self.dataType, self.Leff, self.sigmaRelErr, self.prescale)
         

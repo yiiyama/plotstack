@@ -5,6 +5,8 @@
 #include "TTree.h"
 #include "TFile.h"
 
+#include "Dataset.h"
+
 #include <vector>
 #include <map>
 
@@ -21,14 +23,7 @@ public:
 
 class EventProcessor {
 public:
-  enum DataType {
-    kRealData,
-    kFullSim,
-    kFastSim,
-    nDataTypes
-  };
-
-  EventProcessor(unsigned, char const*, unsigned, double, double, char const*);
+  EventProcessor(unsigned, Dataset const*, char const*);
   virtual ~EventProcessor() {} // ROOT closes files in case of crashes; deleting event list causes double free
 
   virtual void addInput(char const*);
@@ -39,15 +34,9 @@ public:
 
   virtual void process() {}
 
-  /* DATASET */
-
-  TString datasetName;
-  unsigned dataType;
-  double Leff;
-  double sigmaRelErr2;
-
   /* CONFIGURATION */
 
+  Dataset dataset;
   TString outputDir;
   std::vector<bool> produceOutput;
   std::map<TString, unsigned> outputIndices;

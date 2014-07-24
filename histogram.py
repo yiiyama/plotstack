@@ -36,6 +36,11 @@ class Histogram:
         self.hScaleDown.Add(other.hScaleDown, scale)
         self.hRaw.Add(other.hRaw, scale)
 
+    def scale(self, scale):
+        self.hWeighted.Scale(scale)
+        self.hScaleUp.Scale(scale)
+        self.hScaleDown.Scale(scale)
+
     def postFill(self, applyMask = False):
         if self.hdef.maskedRegion and applyMask:
             maskedBins = []

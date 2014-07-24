@@ -10,6 +10,7 @@ if rootlogon:
 
 thisdir = os.path.dirname(os.path.abspath(__file__))
 
+ROOT.gROOT.LoadMacro(thisdir + '/ROOT/Histogram.h+')
+ROOT.gROOT.LoadMacro(thisdir + '/ROOT/Dataset.h+')
 ROOT.gROOT.LoadMacro(thisdir + '/ROOT/EventProcessor.cc+')
-ROOT.gROOT.LoadMacro(thisdir + '/ROOT/histogram.h+')
 ROOT.gROOT.LoadMacro(thisdir + '/ROOT/PlotMaker.cc+')
