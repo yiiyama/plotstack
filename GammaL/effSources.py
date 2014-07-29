@@ -160,16 +160,16 @@ for sample in samples:
 hltSFOutputFile = ROOT.TFile('/afs/cern.ch/user/y/yiiyama/output/GammaL/main/hltEfficiency/scalefactors.root', 'recreate')
 
 photonDataSource = ROOT.TFile('/afs/cern.ch/user/y/yiiyama/output/GammaL/triggers/photon/data.root')
-#photonDataL1 = photonDataSource.Get('SingleEG22_etaNVtx_eff')
-#photonDataHLT = photonDataSource.Get('Ph36IdIso_etaNVtx_eff')
-photonDataL1 = photonDataSource.Get('SingleEG22_ptEta_eff')
-photonDataHLT = photonDataSource.Get('Ph36IdIso_ptEta_eff')
+photonDataL1 = photonDataSource.Get('SingleEG22_etaNVtx_eff')
+photonDataHLT = photonDataSource.Get('Ph36IdIso_etaNVtx_eff')
+#photonDataL1 = photonDataSource.Get('SingleEG22_ptEta_eff')
+#photonDataHLT = photonDataSource.Get('Ph36IdIso_ptEta_eff')
 
 photonMCSource = ROOT.TFile('/afs/cern.ch/user/y/yiiyama/output/GammaL/triggers/photon/dye.root')
-#photonMCL1 = photonMCSource.Get('SingleEG22_etaNVtx_eff')
-#photonMCHLT = photonMCSource.Get('Ph36IdIso_etaNVtx_eff')
-photonMCL1 = photonMCSource.Get('SingleEG22_ptEta_eff')
-photonMCHLT = photonMCSource.Get('Ph36IdIso_ptEta_eff')
+photonMCL1 = photonMCSource.Get('SingleEG22_etaNVtx_eff')
+photonMCHLT = photonMCSource.Get('Ph36IdIso_etaNVtx_eff')
+#photonMCL1 = photonMCSource.Get('SingleEG22_ptEta_eff')
+#photonMCHLT = photonMCSource.Get('Ph36IdIso_ptEta_eff')
 
 hltSFOutputFile.cd()
 photon_e = photonDataHLT.Clone('photon_e')
@@ -201,32 +201,29 @@ photonDataHLT = photonDataSource.Get('Ph22CaloIdL_inclusive_eff')
 photonMCSource = ROOT.TFile('/afs/cern.ch/user/y/yiiyama/output/GammaL/triggers/mueg_ph/zg.root')
 photonMCHLT = photonMCSource.Get('Ph22CaloIdL_inclusive_eff')
 
-photon_mu = ROOT.TGraphErrors(1)
-photon_mu.SetName('photon_mu')
+hltSFOutputFile.cd()
+photon_mu = photonDataHLT.Clone('photon_mu')
 
-sf = photonDataHLT.GetY()[0] / photonMCHLT.GetY()[0]
+sf = photonDataHLT.GetBinContent(1) / photonMCHLT.GetBinContent(1)
 relErr2 = 0.
-relErr = photonDataHLT.GetErrorY(0) / photonDataHLT.GetY()[0]
+relErr = photonDataHLT.GetBinError(1) / photonDataHLT.GetBinContent(1)
 relErr2 += relErr * relErr
-relErr = photonMCHLT.GetErrorY(0) / photonMCHLT.GetY()[0]
+relErr = photonMCHLT.GetBinError(1) / photonMCHLT.GetBinContent(1)
 relErr2 += relErr * relErr
 
-photon_mu.SetPoint(0, 0., sf)
-photon_mu.SetPointError(0, 0., sf * math.sqrt(relErr2))
+photon_mu.SetBinContent(1, sf)
+photon_mu.SetBinError(1, sf * math.sqrt(relErr2))
 
 photonDataSource.Close()
 photonMCSource.Close()
 
-hltSFOutputFile.cd()
-photon_mu.Write()
-
 electronDataSource = ROOT.TFile('/afs/cern.ch/user/y/yiiyama/output/GammaL/triggers/electron/data.root')
-#electronDataHLT = electronDataSource.Get('Ph22IdIso_etaNVtx_eff')
-electronDataHLT = electronDataSource.Get('Ph22IdIso_ptEta_eff')
+electronDataHLT = electronDataSource.Get('Ph22IdIso_etaNVtx_eff')
+#electronDataHLT = electronDataSource.Get('Ph22IdIso_ptEta_eff')
 
 electronMCSource = ROOT.TFile('/afs/cern.ch/user/y/yiiyama/output/GammaL/triggers/electron/dy.root')
-#electronMCHLT = electronMCSource.Get('Ph22IdIso_etaNVtx_eff')
-electronMCHLT = electronMCSource.Get('Ph22IdIso_ptEta_eff')
+electronMCHLT = electronMCSource.Get('Ph22IdIso_etaNVtx_eff')
+#electronMCHLT = electronMCSource.Get('Ph22IdIso_ptEta_eff')
 
 hltSFOutputFile.cd()
 electron = electronDataHLT.Clone('electron')
@@ -252,27 +249,24 @@ electronDataSource.Close()
 electronMCSource.Close()
 
 muonDataSource = ROOT.TFile('/afs/cern.ch/user/y/yiiyama/output/GammaL/triggers/mueg_mu/data.root')
-muonDataHLT = muonDataSource.Get('Mu22_ptEta_eff')
+muonDataHLT = muonDataSource.Get('Mu22_eta_eff')
 
 muonMCSource = ROOT.TFile('/afs/cern.ch/user/y/yiiyama/output/GammaL/triggers/mueg_mu/zg.root')
-muonMCHLT = muonMCSource.Get('Mu22_ptEta_eff')
+muonMCHLT = muonMCSource.Get('Mu22_eta_eff')
 
 hltSFOutputFile.cd()
 muon = muonDataHLT.Clone('muon')
 
-for iX in range(1, muon.GetNbinsX() + 1):
-    for iY in range(1, muon.GetNbinsY() + 1):
-        bin = muon.GetBin(iX, iY)
+for bin in range(1, muon.GetNbinsX() + 1):
+    sf = muonDataHLT.GetBinContent(bin) / muonMCHLT.GetBinContent(bin)
+    relErr2 = 0.
+    relErr = muonDataHLT.GetBinError(bin) / muonDataHLT.GetBinContent(bin)
+    relErr2 += relErr * relErr
+    relErr = muonMCHLT.GetBinError(bin) / muonMCHLT.GetBinContent(bin)
+    relErr2 += relErr * relErr
 
-        sf = muonDataHLT.GetBinContent(bin) / muonMCHLT.GetBinContent(bin)
-        relErr2 = 0.
-        relErr = muonDataHLT.GetBinError(bin) / muonDataHLT.GetBinContent(bin)
-        relErr2 += relErr * relErr
-        relErr = muonMCHLT.GetBinError(bin) / muonMCHLT.GetBinContent(bin)
-        relErr2 += relErr * relErr
-
-        muon.SetBinContent(bin, sf)
-        muon.SetBinError(bin, sf * math.sqrt(relErr2))
+    muon.SetBinContent(bin, sf)
+    muon.SetBinError(bin, sf * math.sqrt(relErr2))
 
 muonDataSource.Close()
 muonMCSource.Close()
@@ -283,31 +277,30 @@ muegDataHLT = muegDataSource.Get('Mu3p5EG12_inclusive_eff')
 muegMCSource = ROOT.TFile('/afs/cern.ch/user/y/yiiyama/output/GammaL/triggers/mueg_cross/zg.root')
 muegMCHLT = muegMCSource.Get('Mu3p5EG12_inclusive_eff')
 
-mueg = ROOT.TGraphErrors(1)
-mueg.SetName('mueg')
+hltSFOutputFile.cd()
+mueg = muegDataHLT.Clone('mueg')
 
-sf = muegDataHLT.GetY()[0] / muegMCHLT.GetY()[0]
+sf = muegDataHLT.GetBinContent(1) / muegMCHLT.GetBinContent(1)
 relErr2 = 0.
-relErr = muegDataHLT.GetErrorY(0) / muegDataHLT.GetY()[0]
+relErr = muegDataHLT.GetBinError(1) / muegDataHLT.GetBinContent(1)
 relErr2 += relErr * relErr
-relErr = muegMCHLT.GetErrorY(0) / muegMCHLT.GetY()[0]
+relErr = muegMCHLT.GetBinError(1) / muegMCHLT.GetBinContent(1)
 relErr2 += relErr * relErr
 
-mueg.SetPoint(0, 0., sf)
-mueg.SetPointError(0, 0., sf * math.sqrt(relErr2))
+mueg.SetBinContent(1, sf)
+mueg.SetBinError(1, sf * math.sqrt(relErr2))
 
 muegDataSource.Close()
 muegMCSource.Close()
 
 hltSFOutputFile.cd()
-mueg.Write()
 hltSFOutputFile.Write()
 hltSFOutputFile.Close()
 
 
 samples = [('WGToLNuG', 'wg'), ('ZGToLLG', 'zg'), ('TTGJets', 'ttg')]
-#plots = [('photon_e', 'photon', ('SingleEG22', 'Ph36IdIso'), 'etaNVtx'), ('photon_mu', 'mueg_ph', 'Ph22CaloIdL', 'etaNVtx'), ('electron', 'electron', 'Ph22IdIso', 'etaNVtx'), ('muon', 'mueg_mu', 'Mu22', 'ptEta')]
-plots = [('photon_e', 'photon', ('SingleEG22', 'Ph36IdIso'), 'ptEta'), ('photon_mu', 'mueg_ph', 'Ph22CaloIdL', 'inclusive'), ('electron', 'electron', 'Ph22IdIso', 'ptEta'), ('muon', 'mueg_mu', 'Mu22', 'ptEta')]
+plots = [('photon_e', 'photon', ('SingleEG22', 'Ph36IdIso'), 'etaNVtx'), ('photon_mu', 'mueg_ph', 'Ph22CaloIdL', 'etaNVtx'), ('electron', 'electron', 'Ph22IdIso', 'etaNVtx'), ('muon', 'mueg_mu', 'Mu22', 'eta')]
+#plots = [('photon_e', 'photon', ('SingleEG22', 'Ph36IdIso'), 'ptEta'), ('photon_mu', 'mueg_ph', 'Ph22CaloIdL', 'inclusive'), ('electron', 'electron', 'Ph22IdIso', 'ptEta'), ('muon', 'mueg_mu', 'Mu22', 'ptEta')]
 
 for fullname, shortname in samples:
     effOutputFile = ROOT.TFile('/afs/cern.ch/user/y/yiiyama/output/GammaL/main/hltEfficiency/' + fullname + '.root', 'recreate')
@@ -326,8 +319,10 @@ for fullname, shortname in samples:
         else:
             eff = source.Get(filterName + '_' + var + '_eff')
 
+        eff.SetName(obj + '_eff')
+        eff.SetDirectory(effOutputFile)
         effOutputFile.cd()
-        eff.Write(obj + '_eff')
+        eff.Write()
 
         source.Close()
 

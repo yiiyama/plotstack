@@ -16,6 +16,7 @@ public:
   int matchLepton;
   bool vetoZ;
   bool dilepton;
+  bool met40;
   bool effCorrection;
 
   GLPlotMaker(int f) :
@@ -23,8 +24,9 @@ public:
     leptonFlavor(f),
     matchPhoton(0),
     matchLepton(0),
-    vetoZ(leptonFlavor == 0),
+    vetoZ(true),
     dilepton(false),
+    met40(false),
     effCorrection(true)
   {
   }
@@ -38,6 +40,7 @@ public:
   void vetoTrueLepton() { matchLepton = -1; }
   void useZ() { vetoZ = false; }
   void dileptonOnly() { dilepton = true; }
+  void cutMet() { met40 = true; }
   void noEffCorrection() { effCorrection = false; }
 
   void run()
@@ -126,7 +129,9 @@ public:
 
       long iEntry(0);
       while(eventList->GetEntry(iEntry++)){
+        if(eventSigma <= 0.) continue;
         if(dilepton && lepton_size < 2) continue;
+        if(met40 && met < 40.) continue;
 
         switch(matchPhoton){
         case 22:
@@ -177,7 +182,7 @@ public:
         fill("Mass2", mass2);
         fill("Mass2Wide", mass2);
 
-        if(vetoZ && leptonFlavor == 0 && mass2 > 86. && mass2 < 96.) continue;
+        if(vetoZ && leptonFlavor == 0 && mass2 > 81. && mass2 < 101.) continue;
 
         countEvent();
 
@@ -200,6 +205,7 @@ public:
           mll = (TLorentzVector(lepton_px[0], lepton_py[0], lepton_pz[0], lepton_energy[0]) +
                  TLorentzVector(lepton_px[1], lepton_py[1], lepton_pz[1], lepton_energy[1])).M();
           fill("Mll", mll);
+          fill("DRPhotonTrailLepton", susy::deltaR(photons.eta[0], photons.phi[0], lepton_eta[1], lepton_phi[1]));
         }
 
         double dEtaGL(photons.eta[0] - lepton_eta[0]);
@@ -291,11 +297,11 @@ public:
           fill("LeptonPtLowMet", lepton_pt[0]);
           fill("NJetLowMet", jets.size);
 
-          if(lepton_size == 1){
-            fill("DRPhotonLeptonLowMet1L", dRGL);
-            fill("DPhiLeptonMetLowMet1L", dPhiLM);
-          }
-          else if(mll > 81. && mll < 101.)
+          fill("DRPhotonLeptonLowMet", dRGL);
+          fill("DPhiPhotonMetLowMet", dPhiGM);
+          fill("DPhiLeptonMetLowMet", dPhiLM);
+
+          if(mll > 81. && mll < 101.)
             fill("PhotonPtLowMetOnZ", photons.pt[0]);
 
           if(dilepton){

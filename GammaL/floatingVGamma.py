@@ -46,8 +46,8 @@ class FloatingVGammaSearch(StackConfig):
 
         fitter = ROOT.TemplateChi2Fitter.singleton()
         
-        vgScale = ROOT.RooRealVar('vg', 'vg', 1., -ROOT.RooNumber.infinity(), ROOT.RooNumber.infinity())
-        qcdScale = ROOT.RooRealVar('qcd', 'qcd', 1., -ROOT.RooNumber.infinity(), ROOT.RooNumber.infinity())
+        vgScale = ROOT.RooRealVar('vg', 'vg', 1., 0., 5.)
+        qcdScale = ROOT.RooRealVar('qcd', 'qcd', 0.1, 0., 1.)
 
         target = observed.Clone('target')
         for histo in fakeHistograms.values():
@@ -116,6 +116,8 @@ class FloatingVGammaSearch(StackConfig):
 
             return result
 
+        canvas = ROOT.TCanvas('c1', 'c1')
+
         print 'Error evaluation with 1000 toys:'
         for iToy in range(1000):
             if iToy % 100 == 0:
@@ -127,10 +129,14 @@ class FloatingVGammaSearch(StackConfig):
             effScaleVar = random.gauss(0., 1.)
                 
             target = observed.Clone('target')
+
             egTemplate = modifyTemplate(fakeHistograms['EGFake'], egScaleVar)
-            jgTemplate = modifyTemplate(fakeHistograms['JGFake'], jgScaleVar)
             target.Add(egTemplate, -1.)
+            egTemplate.Delete()
+
+            jgTemplate = modifyTemplate(fakeHistograms['JGFake'], jgScaleVar)
             target.Add(jgTemplate, -1.)
+            jgTemplate.Delete()
 
             vgTemplate = modifyTemplate(vgHistogram, effScaleVar, 'vg')
 
@@ -144,12 +150,24 @@ class FloatingVGammaSearch(StackConfig):
             fitter.addTemplate(vgTemplate, 'vg', vgScale)
             fitter.addTemplate(qcdHistogram.hWeighted, 'qcd', qcdScale)
 
-            target.Delete()
-            egTemplate.Delete()
-            jgTemplate.Delete()
-            vgTemplate.Delete()
-
             if fitter.fit(-1) != 0: continue
+
+            if iToy < 20:
+                stack = ROOT.THStack('stack', 'stack')
+                qcdTemplate = qcdHistogram.hWeighted.Clone('qcdTemplate')
+                qcdTemplate.Scale(qcdScale.getVal())
+                vgTemplate.Scale(vgScale.getVal())
+                qcdTemplate.SetFillColor(ROOT.kRed)
+                vgTemplate.SetFillColor(ROOT.kBlue)
+                stack.Add(qcdTemplate)
+                stack.Add(vgTemplate)
+                stack.Draw('HIST')
+                target.Draw('EP SAME')
+                canvas.Print('/afs/cern.ch/user/y/yiiyama/www/plots/TestM_fits/%d.pdf' % iToy)
+                qcdTemplate.Delete()
+
+            target.Delete()
+            vgTemplate.Delete()
 
             vgScales.append(vgScale.getVal())
             qcdScales.append(qcdScale.getVal())
@@ -186,12 +204,9 @@ class FloatingVGammaSearch(StackConfig):
 
         for sample in groups['VGamma'].getSamples(candClass):
             count = sample.counter.GetBinContent(1)
-#            scaleError = max(vgErrHigh, vgErrLow)
-#            scaleHigh = vgCentral + vgErrHigh
-#            scaleLow = vgCentral - vgErrLow
-            scaleError = vgCentralErr
-            scaleHigh = vgCentral + vgCentralErr
-            scaleLow = vgCentral - vgCentralErr
+            scaleError = max(vgErrHigh, vgErrLow)
+            scaleHigh = vgCentral + vgErrHigh
+            scaleLow = vgCentral - vgErrLow
 
             for histogram in sample.histograms.values():
                 histogram.hWeighted.Scale(vgCentral)

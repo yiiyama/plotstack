@@ -8,7 +8,10 @@ def weightEvents(dataset, processorClass, weightCalc, inputDir, outputDir, event
 
     for eventClass, sample in dataset.samples.items():
         if len(eventClasses) and eventClass not in eventClasses: continue
-        processor.setOutput(eventClass, weightCalc[sample])
+        try:
+            processor.setOutput(eventClass, weightCalc[sample])
+        except KeyError:
+            processor.setOutput(eventClass)
 
     processor.book()
         

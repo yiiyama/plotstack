@@ -63,7 +63,8 @@ addDataset(datasets, fullsim('WGToLNuG_PtG-130', 471458. / 0.2571, 0., MC)) # he
 addDataset(datasets, fullsim('ZGToLLG_PtG-5-130', 6588161. / 132.6, 0., MC))
 addDataset(datasets, fullsim('ZGToLLG_PtG-130', 497474. / 0.0478, 0., MC))
 addDataset(datasets, fullsim('WWGJets', 304285. / 0.528, 0.5, MC))
-addDataset(datasets, fullsim('TTGJets', (1719954. * 0.453765) / (245.8 * 0.0107), 0.5, MC)) # factor 0.453765 = 453765 events in phase space of TOP-13-011 / 1M events studied
+addDataset(datasets, fullsim('TTGJets', 1719954. / (1.444 * 2.), 0.5, MC)) # factor 0.453765 = 453765 events in phase space of TOP-13-011 / 1M events studied
+addDataset(datasets, fullsim('ttA', 1074860. / (228.4 * 0.0107), 0.5, MC))
 addDataset(datasets, fullsim('WW', 10000431. / 56., 0.5, All)) # NLO from twiki
 addDataset(datasets, fullsim('TTJetsSemiLept', 24953451. / (245.8 * 0.324 * 0.676 * 2), 0.5, All)) # NNLO from twiki * BR(W->lnu BR) * BR(W->had) * 2. Sudakov = 0.999
 addDataset(datasets, fullsim('TTJetsFullLept', 12011428. / (245.8 * 0.324 * 0.324), 0.5, All)) # NNLO from twiki * BR(W->lnu)^2. Sudakov = 0.999
@@ -91,6 +92,8 @@ eventWeights['mcegHLT'] = ROOT.MCElePhotonFunctionalWeight()
 eventWeights['mceg'] = ROOT.MCElePhotonFunctionalWeight(True)
 eventWeights['mcjgHLT'] = ROOT.MCJetPhotonWeight(0)
 eventWeights['mcjg'] = ROOT.MCJetPhotonWeight(1)
+
+#eventWeights['geniso'] = ROOT.PhotonGenIsoWeight()
 
 ### EXPORTED ###
 weightCalc = {
@@ -170,7 +173,7 @@ hdefs = [
     HDef('Mass2', 'M_{l#gamma}', (60, 60., 120.), xtitle = ('M_{l#gamma}', 'GeV')),
     HDef('Mass2Wide', 'M_{l#gamma}', massBinning, xtitle = ('M_{l#gamma}', 'GeV'), overflowable = True, logscale = True),
     HDef('Mass3', 'M_{ll#gamma}', (30, 60., 120.), xtitle = ('M_{ll#gamma}', 'GeV')),
-    HDef('Mass3Wide', 'M_{l#gamma}', massBinning, xtitle = ('M_{ll#gamma}', 'GeV'), overflowable = True, logscale = True),
+    HDef('Mass3Wide', 'M_{ll#gamma}', massBinning, xtitle = ('M_{ll#gamma}', 'GeV'), overflowable = True, logscale = True),
     HDef('Mll', 'M_{ll}', (60, 60., 120.), xtitle = ('M_{ll}', 'GeV'), overflowable = True),
     HDef('PhotonPt', 'Photon P_{T}', photonPtBinning, xtitle = PT, overflowable = True, mask = (80., 'inf'), logscale = True),
     HDef('PhotonPtZoomLowMet', 'Photon P_{T} (#slash{E}_{T} < 70 GeV)', (50, 40., 140.), xtitle = PT, overflowable = True, logscale = True),
@@ -186,7 +189,8 @@ hdefs = [
     HDef('DPhiPhotonLepton', '#Delta#phi(#gamma, l)', dPhiBinning, xtitle = DPHI),
     HDef('DPhiPhotonLeptonOnZ', '#Delta#phi(#gamma, l) (81 GeV < M_{ll} < 101 GeV)', dPhiBinning, xtitle = DPHI),
     HDef('DRPhotonLepton', '#DeltaR(#gamma, l)', dRBinning, xtitle = DR),
-    HDef('DRPhotonLeptonLowMet1L', '#DeltaR(#gamma, l) (#slash{E}_{T} < 70 GeV, N_{l} = 1)', dRBinning, xtitle = DR),
+    HDef('DRPhotonLeptonLowMet', '#DeltaR(#gamma, l) (#slash{E}_{T} < 70 GeV)', dRBinning, xtitle = DR),
+    HDef('DRPhotonTrailLepton', '#DeltaR(#gamma, l_{2})', dRBinning, xtitle = DR),
     HDef('DEtaPhotonJet', '#Delta#eta(#gamma, j)', dEtaBinning, xtitle = DETA),
     HDef('DPhiPhotonJet', '#Delta#phi(#gamma, j)', dPhiBinning, xtitle = DPHI),
     HDef('DRPhotonJet', '#DeltaR(#gamma, j)', dRBinning, xtitle = DR),
@@ -194,8 +198,9 @@ hdefs = [
     HDef('DPhiLeptonJet', '#Delta#phi(l, j)', dPhiBinning, xtitle = DPHI),
     HDef('DRLeptonJet', '#DeltaR(l, j)', dRBinning, xtitle = DR),
     HDef('DPhiPhotonMet', '#Delta#phi(#gamma, #slash{E}_{T})', dPhiBinning, xtitle = DPHI),
+    HDef('DPhiPhotonMetLowMet', '#Delta#phi(#gamma, #slash{E}_{T}) (#slash{E}_{T} < 70 GeV)', dPhiBinning, xtitle = DPHI),
     HDef('DPhiLeptonMet', '#Delta#phi(l, #slash{E}_{T})', dPhiBinning, xtitle = DPHI),
-    HDef('DPhiLeptonMetLowMet1L', '#Delta#phi(l, #slash{E}_{T}) (#slash{E}_{T} < 70 GeV, N_{l} = 1)', dPhiBinning, xtitle = DPHI),
+    HDef('DPhiLeptonMetLowMet', '#Delta#phi(l, #slash{E}_{T}) (#slash{E}_{T} < 70 GeV)', dPhiBinning, xtitle = DPHI),
     HDef('NPhoton', 'N_{#gamma}', (3, 0.5, 3.5), xtitle = 'N_{#gamma}', xlabels = [str(i) for i in range(1, 4)], logscale = True),
     HDef('NLepton', 'N_{l}', (4, 0.5, 4.5), xtitle = 'N_{l}', xlabels = [str(i) for i in range(1, 5)], logscale = True),
     HDef('NPhotonNLepton', 'N_{#gamma} vs N_{l}', (4, 0.5, 4.5, 3, 0.5, 3.5), xtitle = 'N_{l}', xlabels = [str(i) for i in range(1, 4)], ytitle = 'N_{#gamma}', ylabels = [str(i) for i in range(1, 5)], drawOption = 'BOX TEXT'),
@@ -246,6 +251,7 @@ gVGammaE = Group('VGamma', 'V#gamma (MC)', ROOT.kMagenta, Group.BACKGROUND, [
 gEWKE = Group('EWK', 't#bar{t}#gamma/W^{+}W^{-}#gamma (MC)', ROOT.kCyan, Group.BACKGROUND, [
     datasets['WWGJets'].PhotonAndElectron,
     datasets['WW'].PhotonAndElectron,
+#    datasets['ttA'].PhotonAndElectron,
     datasets['TTGJets'].PhotonAndElectron,
     datasets['TTJetsSemiLept'].PhotonAndElectron,
     datasets['TTJetsFullLept'].PhotonAndElectron
@@ -259,7 +265,7 @@ gT5wg_1000_425E = Group('T5wg_1000_425', 'T5wg_1000_425', ROOT.kGreen + 3, Group
 
 plotMakerE = ROOT.GLPlotMaker(0)
 
-stackConfigs['FloatingVGammaE'] = FloatingVGammaSearch(plotMakerE, 'Electron', next(hdef for hdef in hdefs if hdef.name == 'DRPhotonLeptonLowMet1L'))
+stackConfigs['FloatingVGammaE'] = FloatingVGammaSearch(plotMakerE, 'Electron', hdefList['DRPhotonLeptonLowMet'])
 stackConfigs['FloatingVGammaE'].groups = [
     gObservedE,
     gEGFakeE,
@@ -287,6 +293,7 @@ gVGammaM = Group('VGamma', 'V#gamma (MC)', ROOT.kMagenta, Group.BACKGROUND, [
 gEWKM = Group('EWK', 't#bar{t}#gamma/W^{+}W^{-}#gamma (MC)', ROOT.kCyan, Group.BACKGROUND, [
     datasets['WWGJets'].PhotonAndMuon,
     datasets['WW'].PhotonAndMuon,
+#    datasets['ttA'].PhotonAndMuon,
     datasets['TTGJets'].PhotonAndMuon,
     datasets['TTJetsSemiLept'].PhotonAndMuon,
     datasets['TTJetsFullLept'].PhotonAndMuon
@@ -300,7 +307,7 @@ gT5wg_1000_425M = Group('T5wg_1000_425', 'T5wg_1000_425', ROOT.kGreen + 3, Group
 
 plotMakerM = ROOT.GLPlotMaker(1)
 
-stackConfigs['FloatingVGammaM'] = FloatingVGammaSearch(plotMakerM, 'Muon', next(hdef for hdef in hdefs if hdef.name == 'DPhiLeptonMetLowMet1L'))
+stackConfigs['FloatingVGammaM'] = FloatingVGammaSearch(plotMakerM, 'Muon', hdefList['DPhiLeptonMetLowMet'])
 stackConfigs['FloatingVGammaM'].groups = [
     gObservedM,
     gEGFakeM,
@@ -316,8 +323,8 @@ stackConfigs['FloatingVGammaM'].hdefs = hdefs
 
 from fixedScales import FixedScalesSearch
 
-stackConfigs['FixedScalesE'] = FixedScalesSearch(stackConfigs['FloatingVGammaE'], (1.490, 0.103), 0.1697)
-stackConfigs['FixedScalesM'] = FixedScalesSearch(stackConfigs['FloatingVGammaM'], (1.490, 0.103), 0.05418)
+stackConfigs['FixedScalesE'] = FixedScalesSearch(stackConfigs['FloatingVGammaE'], (1.70322314021263299e+00, 1.42624349817546459e-01), 1.74763915546969933e-01)
+stackConfigs['FixedScalesM'] = FixedScalesSearch(stackConfigs['FloatingVGammaM'], (1.41366725867099774e+00, 1.42256386102304233e-01), 4.60819267916387360e-02)
 
 ######### Dimuon ##########
 
@@ -366,6 +373,7 @@ gVGammaMM = Group('VGamma', 'V#gamma (MC)', ROOT.kMagenta, Group.BACKGROUND, [
 gEWKMM = Group('EWK', 't#bar{t}#gamma/W^{+}W^{-}#gamma (MC)', ROOT.kCyan, Group.BACKGROUND, [
     datasets['WWGJets'].PhotonAndMuon,
     datasets['WW'].PhotonAndMuon,
+#    datasets['ttA'].PhotonAndMuon,
     datasets['TTGJets'].PhotonAndMuon,
     datasets['TTJetsFullLept'].PhotonAndMuon
 ])
@@ -454,10 +462,10 @@ gJGFakeTruthE = Group('JGFake', 'Fake (MC truth)', ROOT.kBlack, Group.OBSERVED, 
     datasets['WJetsToLNu_PtW-50To70'].PhotonAndElectron,
     datasets['WJetsToLNu_PtW-70To100'].PhotonAndElectron,
     datasets['WJetsToLNu_PtW-100'].PhotonAndElectron,
-#    datasets['DYJetsToLL'].PhotonAndElectron,
-#    datasets['TTJetsSemiLept'].PhotonAndElectron,
-#    datasets['TTJetsFullLept'].PhotonAndElectron,
-#    datasets['WW'].PhotonAndElectron
+    datasets['DYJetsToLL'].PhotonAndElectron,
+    datasets['TTJetsSemiLept'].PhotonAndElectron,
+    datasets['TTJetsFullLept'].PhotonAndElectron,
+    datasets['WW'].PhotonAndElectron
 ])
 gWJJetProxyE = Group('WJJetProxy', 'WJets Proxy (MC)', ROOT.kGreen, Group.BACKGROUND, [
 #    datasets['WJetsToLNu'].FakePhotonAndElectron,
@@ -480,8 +488,8 @@ stackConfigs['JGFakeClosureE'] = StackConfig(plotMakerEL)
 stackConfigs['JGFakeClosureE'].groups = [
     gJGFakeTruthE,
     gWJJetProxyE,
-#    gDYJetProxyE,
-#    gEWKJetProxyE
+    gDYJetProxyE,
+    gEWKJetProxyE
 ]
 stackConfigs['JGFakeClosureE'].hdefs = hdefsClosure
 stackConfigs['JGFakeClosureE'].specialPlotMakers = {
@@ -495,10 +503,10 @@ gJGFakeTruthM = Group('JGFake', 'Fake (MC truth)', ROOT.kBlack, Group.OBSERVED, 
     datasets['WJetsToLNu_PtW-50To70'].PhotonAndMuon,
     datasets['WJetsToLNu_PtW-70To100'].PhotonAndMuon,
     datasets['WJetsToLNu_PtW-100'].PhotonAndMuon,
-#    datasets['DYJetsToLL'].PhotonAndMuon,
-#    datasets['TTJetsSemiLept'].PhotonAndMuon,
-#    datasets['TTJetsFullLept'].PhotonAndMuon,
-#    datasets['WW'].PhotonAndMuon
+    datasets['DYJetsToLL'].PhotonAndMuon,
+    datasets['TTJetsSemiLept'].PhotonAndMuon,
+    datasets['TTJetsFullLept'].PhotonAndMuon,
+    datasets['WW'].PhotonAndMuon
 ])
 gWJJetProxyM = Group('WJJetProxy', 'WJets Proxy (MC)', ROOT.kGreen, Group.BACKGROUND, [
 #    datasets['WJetsToLNu'].FakePhotonAndMuon,
@@ -521,8 +529,8 @@ stackConfigs['JGFakeClosureM'] = StackConfig(plotMakerML)
 stackConfigs['JGFakeClosureM'].groups = [
     gJGFakeTruthM,
     gWJJetProxyM,
-#    gDYJetProxyM,
-#    gEWKJetProxyM
+    gDYJetProxyM,
+    gEWKJetProxyM
 ]
 stackConfigs['JGFakeClosureM'].hdefs = hdefsClosure
 stackConfigs['JGFakeClosureM'].specialPlotMakers = {
@@ -551,16 +559,22 @@ stackConfigs['PlotVG'].groups = [
 ]
 stackConfigs['PlotVG'].hdefs = [HDef('Met', 'MET', metBinning2, xtitle = MET, logscale = True)]
 
-plotMakerETrue = ROOT.GLPlotMaker(0)
-plotMakerETrue.matchTruePhoton()
-plotMakerETrue.matchTrueLepton()
-
 #from floatingWGamma import FloatingWGammaSearch
 
-plotMakerENoCorr = ROOT.GLPlotMaker(0)
-plotMakerENoCorr.noEffCorrection()
+plotMakerEVeto = ROOT.GLPlotMaker(0)
+plotMakerEVeto.vetoElePhoton()
 
-stackConfigs['TestE'] = FloatingVGammaSearch(plotMakerENoCorr, 'Electron', next(hdef for hdef in hdefs if hdef.name == 'DRPhotonLeptonLowMet1L'))
+gVGammaAltE = Group('VGamma', 'V#gamma (MC)', ROOT.kMagenta, Group.BACKGROUND, [
+    datasets['WGToLNuG_PtG-30-50'].PhotonAndElectron,
+    datasets['WGToLNuG_PtG-50-130'].PhotonAndElectron,
+    datasets['WGToLNuG_PtG-130'].PhotonAndElectron,
+    datasets['DYJetsToLL'].PhotonAndElectron
+])
+
+plotMakerE40 = ROOT.GLPlotMaker(0)
+plotMakerE40.cutMet()
+
+stackConfigs['TestE'] = FloatingVGammaSearch(plotMakerE40, 'Electron', hdefList['DPhiPhotonMetLowMet'])
 stackConfigs['TestE'].groups = [
     gObservedE,
     gEGFakeE,
@@ -572,10 +586,10 @@ stackConfigs['TestE'].groups = [
 ]
 stackConfigs['TestE'].hdefs = hdefs
 
-plotMakerMNoCorr = ROOT.GLPlotMaker(1)
-plotMakerMNoCorr.noEffCorrection()
+plotMakerM40 = ROOT.GLPlotMaker(1)
+plotMakerM40.cutMet()
 
-stackConfigs['TestM'] = FloatingVGammaSearch(plotMakerMNoCorr, 'Muon', next(hdef for hdef in hdefs if hdef.name == 'DPhiLeptonMetLowMet1L'))
+stackConfigs['TestM'] = FloatingVGammaSearch(plotMakerM40, 'Muon', hdefList['DPhiLeptonMetLowMet'])
 stackConfigs['TestM'].groups = [
     gObservedM,
     gEGFakeM,

@@ -41,7 +41,7 @@ EventProcessor::addInput(char const* _inputPath)
 }
 
 void
-EventProcessor::setOutput(char const* _outputName, EventWeight* _calc)
+EventProcessor::setOutput(char const* _outputName, EventWeight* _calc/* = 0*/)
 {
   std::map<TString, unsigned>::iterator idxItr(outputIndices.find(_outputName));
   if(idxItr == outputIndices.end()) return;
@@ -60,7 +60,8 @@ EventProcessor::book()
     if(dataset.prescale != 1) outputName += TString::Format("_ps%d", dataset.prescale);
     outputName += ".root";
     TFile::Open(outputName, "recreate");
-    TObjString(weightCalc[fItr->second]->name).Write();
+    if(weightCalc[fItr->second])
+      TObjString(weightCalc[fItr->second]->name).Write();
     
     eventList[fItr->second] = new TTree("eventList", "Event List");
     eventList[fItr->second]->SetAutoSave(10000000);
@@ -89,8 +90,14 @@ EventProcessor::write()
 void
 EventProcessor::fill(unsigned _iF)
 {
-  eventSigma = weightCalc[_iF]->weight / dataset.Leff;
-  sigmaErr = eventSigma * std::sqrt(weightCalc[_iF]->relErr * weightCalc[_iF]->relErr + dataset.sigmaRelErr2);
+  if(weightCalc[_iF]){
+    eventSigma = weightCalc[_iF]->weight / dataset.Leff;
+    sigmaErr = eventSigma * std::sqrt(weightCalc[_iF]->relErr * weightCalc[_iF]->relErr + dataset.sigmaRelErr2);
+  }
+  else{
+    eventSigma = 1. / dataset.Leff;
+    sigmaErr = eventSigma * std::sqrt(dataset.sigmaRelErr2);
+  }
 
   eventList[_iF]->Fill();
 }

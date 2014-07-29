@@ -27,7 +27,7 @@ public:
   virtual ~EventProcessor() {} // ROOT closes files in case of crashes; deleting event list causes double free
 
   virtual void addInput(char const*);
-  virtual void setOutput(char const*, EventWeight*);
+  virtual void setOutput(char const*, EventWeight* = 0);
   virtual void book();
   virtual void write();
   virtual void fill(unsigned);
