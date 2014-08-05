@@ -8,6 +8,8 @@ rootlogon = ROOT.gEnv.GetValue("Rint.Logon", "")
 if rootlogon:
     ROOT.gROOT.Macro(rootlogon)
 
+ROOT.gSystem.Load('libRooFit.so')
+
 thisdir = os.path.dirname(os.path.abspath(__file__))
 
 ROOT.gROOT.LoadMacro(thisdir + '/ROOT/Histogram.h+')

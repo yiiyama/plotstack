@@ -33,6 +33,7 @@ class Group(object):
         self.samples = samples
         self.counter = None
         self.histograms = {}
+        self.rawHistograms = {}
 
     def bookHistograms(self, hdefs, outputDir):
         directory = outputDir.GetDirectory('counters')
@@ -47,6 +48,7 @@ class Group(object):
             self.counter.Add(sample.counter)
         
         self.histograms = {}
+        self.rawHistograms = {}
         for hdef in hdefs:
             directory = outputDir.GetDirectory(hdef.name)
             if not directory:
@@ -57,10 +59,12 @@ class Group(object):
             hWeighted.Sumw2()
             hScaleUp = hdef.generate(suffix = self.name + '_ScaleUp')
             hScaleDown = hdef.generate(suffix = self.name + '_ScaleDown')
+            hRaw = hdef.generate(suffix = self.name + '_Raw')
             for sample in self.samples:
                 hWeighted.Add(sample.histograms[hdef.name].hWeighted)
                 hScaleUp.Add(sample.histograms[hdef.name].hScaleUp)
                 hScaleDown.Add(sample.histograms[hdef.name].hScaleDown)
+                hRaw.Add(sample.histograms[hdef.name].hRaw)
 
             for iX in range(1, hdef.nx + 1):
                 for iY in range(1, hdef.ny + 1):
@@ -71,14 +75,17 @@ class Group(object):
                     hWeighted.SetBinError(bin, math.sqrt(stat * stat + scal * scal))
 
             self.histograms[hdef.name] = hWeighted
+            self.rawHistograms[hdef.name] = hRaw
             hScaleUp.Delete()
             hScaleDown.Delete()
 
     def loadHistograms(self, hdefs, sourceDir):
         self.histograms = {}
+        self.rawHistograms = {}
         for hdef in hdefs:
             directory = sourceDir.GetDirectory(hdef.name)
             self.histograms[hdef.name] = directory.Get(hdef.name + '_' + self.name)
+            self.rawHistograms[hdef.name] = directory.Get(hdef.name + '_' + self.name + '_Raw')
 
     def getSamples(self, eventClass):
         return [s for s in self.samples if s.eventClass == eventClass]
@@ -98,6 +105,7 @@ class Stack(object):
         self.bkgHistogram.SetFillStyle(3003)
         self.bkgHistogram.SetFillColor(ROOT.kPink)
         self.obsHistogram = None
+        self.obsRawHistogram = None
 
     def addGroup(self, group):
         self.groups.append(group)
@@ -111,18 +119,17 @@ class Stack(object):
 
             if not self.obsHistogram:
                 self.obsHistogram = self.hdef.generate('obs')
-                self.obsHistogram.SetLineColor(ROOT.kBlack)
-                self.obsHistogram.SetMarkerStyle(8)
-                self.obsHistogram.SetMarkerSize(0.6)
-                self.obsHistogram.SetMarkerColor(ROOT.kBlack)
-                self.obsHistogram.SetFillStyle(0)
+                self.obsRawHistogram = self.hdef.generate('obsRaw')
 
             self.obsHistogram.Add(histogram)
+            self.obsRawHistogram.Add(group.rawHistograms[self.name])
+
         elif group.category == Group.BACKGROUND:
             histogram.SetFillColor(group.color)
             histogram.SetFillStyle(1001)
 
             self.bkgHistogram.Add(histogram)
+
         if group.category == Group.SIGNAL:
             histogram.SetLineWidth(2)
             histogram.SetFillStyle(0)
@@ -143,6 +150,24 @@ class Stack(object):
 
         for group in bkgGroups:
             stack.Add(self.histograms[group])
+
+        obs = ROOT.RooHist(self.obsRawHistogram, 1.)
+        obs.SetName(self.name + '_obsGraph')
+        obs.SetLineColor(ROOT.kBlack)
+        obs.SetMarkerStyle(8)
+        obs.SetMarkerSize(0.6)
+        obs.SetMarkerColor(ROOT.kBlack)
+        obs.SetFillStyle(0)
+
+        if self.hdef.overflowable:
+            iP = obs.GetN() - 1
+            cont = self.obsRawHistogram.GetBinContent(iP + 1)
+            obs.SetPoint(iP, obs.GetX()[iP], cont)
+            ylow = ROOT.Double()
+            yhigh = ROOT.Double()
+            ROOT.RooHistError.instance().getPoissonInterval(int(cont), ylow, yhigh, 1.)
+            obs.SetPointEYhigh(iP, yhigh - cont)
+            obs.SetPointEYlow(iP, cont - ylow)
 
         canvas = ROOT.TCanvas(self.name, self.hdef.title)
 
@@ -168,7 +193,7 @@ class Stack(object):
         legend.ConvertNDCtoPad()
 
         if self.obsHistogram and self.obsHistogram.GetSumOfWeights() > 0.:
-            legend.AddEntry(self.obsHistogram, 'Observed', 'LP')
+            legend.AddEntry(obs, 'Observed', 'LP')
 
         for group in reversed(bkgGroups):
             legend.AddEntry(self.histograms[group], group.title, 'F')
@@ -212,7 +237,7 @@ class Stack(object):
             self.histograms[group].Draw('HIST SAME')
 
         if self.obsHistogram and (drawEmpty or self.obsHistogram.GetSumOfWeights() > 0.):
-            self.obsHistogram.Draw('EP SAME')
+            obs.Draw('PZ')
 
         distPad.Update()
 
@@ -287,7 +312,7 @@ class Stack(object):
         ratioPad.cd()
 
         if USESIGNIFICANCE:
-            hDiff = self.obsHistogram.Clone(self.name + '_diff')
+            gDiff = obs.Clone(self.name + '_diff')
 
             for iX in range(1, self.hdef.nx + 1):
                 if self.obsHistogram.GetBinContent(iX) == 0.: continue
@@ -297,15 +322,17 @@ class Stack(object):
                 if bkgErr == 0.:
                     bkgErr = 1. / self.bkgHistogram.GetXaxis().GetBinWidth(iX)
 
-                hDiff.SetBinError(iX, self.obsHistogram.GetBinError(iX) / bkgErr)
-                hDiff.SetBinContent(iX, (self.obsHistogram.GetBinContent(iX) - bkg) / bkgErr)
+                iP = iX - 1
+                gDiff.SetPoint(iP, obs.GetX()[iP], (obs.GetY()[iP] - bkg) / bkgErr)
+                gDiff.SetPointEYhigh(iP, obs.GetErrorYhigh(iP) / bkgErr)
+                gDiff.SetPointEYlow(iP, obs.GetErrorYlow(iP) / bkgErr)
 
-            hDiff.Draw('EP')
-            hDiff.GetYaxis().SetRangeUser(-3., 3.)
-            hDiff.GetYaxis().SetTitle('(obs - bkg) / #delta_{bkg}')
-            hFrame = hDiff
+            gDiff.Draw('APZ')
+            gDiff.GetYaxis().SetRangeUser(-3., 3.)
+            gDiff.GetYaxis().SetTitle('(obs - bkg) / #delta_{bkg}')
+            hFrame = gDiff.GetHistogram()
 
-            line = ROOT.TLine(hDiff.GetXaxis().GetXmin(), 0., hDiff.GetXaxis().GetXmax(), 0.)
+            line = ROOT.TLine(self.obsHistogram.GetXaxis().GetXmin(), 0., self.obsHistogram.GetXaxis().GetXmax(), 0.)
         else:
             hUncert = self.bkgHistogram.Clone(self.name + '_uncert')
             for iX in range(1, self.hdef.nx + 1):
@@ -318,18 +345,20 @@ class Stack(object):
             hUncert.GetYaxis().SetRangeUser(0., 2.)
             hUncert.GetYaxis().SetTitle('obs / bkg')
             hFrame = hUncert
-            
-            hRatio = self.obsHistogram.Clone(self.name + '_ratio')
+
+            gRatio = obs.Clone(self.name + '_ratio')
 
             for iX in range(1, self.hdef.nx + 1):
                 bkg = self.bkgHistogram.GetBinContent(iX)
                 bkgErr = self.bkgHistogram.GetBinError(iX)
                 if bkg == 0.: continue
 
-                hRatio.SetBinError(iX, self.obsHistogram.GetBinError(iX) / bkg)
-                hRatio.SetBinContent(iX, self.obsHistogram.GetBinContent(iX) / bkg)
+                iP = iX - 1
+                gRatio.SetPoint(iP, obs.GetX()[iP], obs.GetY()[iP] / bkg)
+                gRatio.SetPointEYhigh(iP, obs.GetErrorYhigh(iP) / bkg)
+                gRatio.SetPointEYlow(iP, obs.GetErrorYlow(iP) / bkg)
 
-            hRatio.Draw('EP SAME')
+            gRatio.Draw('PZ')
 
             line = ROOT.TLine(hUncert.GetXaxis().GetXmin(), 1., hUncert.GetXaxis().GetXmax(), 1.)
 
