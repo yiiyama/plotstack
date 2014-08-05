@@ -152,6 +152,8 @@ private:
   float mt;
   float metJESUp;
   float metJESDown;
+  float metPhiJESUp;
+  float metPhiJESDown;
   float mtJESUp;
   float mtJESDown;
   float mass2;
@@ -325,31 +327,24 @@ GLSkimProcessor::process()
   eventVars.setAddress(eventTree);
 
   objectTree.SetBranchStatus("*", 0);
-  if(useElectronFilter) objectTree.SetBranchStatus("electron*", 1);
-  if(useMuonFilter) objectTree.SetBranchStatus("muon*", 1);
+  objectTree.SetBranchStatus("electron*", 1);
+  objectTree.SetBranchStatus("muon*", 1);
   objectTree.SetBranchStatus("photon*", 1);
   objectTree.SetBranchStatus("vertex*", 1);
   objectTree.SetBranchStatus("jet*", 1);
 
-  if(useElectronFilter){
-    electrons.setAddress(objectTree);
-    objectTree.SetBranchAddress("electron.isCand", electron_isCand);
-    objectTree.SetBranchAddress("electron.isFake", electron_isFake);
-    objectTree.SetBranchAddress("electron.hltEG22CaloId10Iso50TrackIsoDoubleLastFilterUnseeded", electron_matchHLT);
-  }
-  if(useMuonFilter){
-    muons.setAddress(objectTree);
-    objectTree.SetBranchAddress("muon.isCand", muon_isCand);
-    objectTree.SetBranchAddress("muon.isFake", muon_isFake);
-    objectTree.SetBranchAddress("muon.hltL1Mu3p5EG12L3Filtered22", muon_matchHLT);
-  }
+  electrons.setAddress(objectTree);
+  objectTree.SetBranchAddress("electron.isCand", electron_isCand);
+  objectTree.SetBranchAddress("electron.isFake", electron_isFake);
+  objectTree.SetBranchAddress("electron.hltEG22CaloId10Iso50TrackIsoDoubleLastFilterUnseeded", electron_matchHLT);
+  muons.setAddress(objectTree);
+  objectTree.SetBranchAddress("muon.isCand", muon_isCand);
+  objectTree.SetBranchAddress("muon.isFake", muon_isFake);
+  objectTree.SetBranchAddress("muon.hltL1Mu3p5EG12L3Filtered22", muon_matchHLT);
   photons.setAddress(objectTree);
-  if(useElectronFilter){
-    objectTree.SetBranchAddress("photon.hltEG36CaloId10Iso50HcalIsoLastFilter", photon_matchEHLT[0]);
-    objectTree.SetBranchAddress("photon.hltEG22CaloId10Iso50TrackIsoDoubleLastFilterUnseeded", photon_matchEHLT[1]);
-  }
-  if(useMuonFilter)
-    objectTree.SetBranchAddress("photon.hltMu22Photon22CaloIdLHEFilter", photon_matchMHLT);
+  objectTree.SetBranchAddress("photon.hltEG36CaloId10Iso50HcalIsoLastFilter", photon_matchEHLT[0]);
+  objectTree.SetBranchAddress("photon.hltEG22CaloId10Iso50TrackIsoDoubleLastFilterUnseeded", photon_matchEHLT[1]);
+  objectTree.SetBranchAddress("photon.hltMu22Photon22CaloIdLHEFilter", photon_matchMHLT);
   objectTree.SetBranchAddress("photon.isCand", photon_isCand);
   objectTree.SetBranchAddress("photon.isFake", photon_isFake);
   objectTree.SetBranchAddress("photon.isEle", photon_isEle);
@@ -374,6 +369,8 @@ GLSkimProcessor::process()
     eventList[iF]->Branch("mt", &mt, "mt/F");
     eventList[iF]->Branch("metJESUp", &metJESUp, "metJESUp/F");
     eventList[iF]->Branch("metJESDown", &metJESDown, "metJESDown/F");
+    eventList[iF]->Branch("metPhiJESUp", &metPhiJESUp, "metPhiJESUp/F");
+    eventList[iF]->Branch("metPhiJESDown", &metPhiJESDown, "metPhiJESDown/F");
     eventList[iF]->Branch("mtJESUp", &mtJESUp, "mtJESUp/F");
     eventList[iF]->Branch("mtJESDown", &mtJESDown, "mtJESDown/F");
     eventList[iF]->Branch("mass2", &mass2, "mass2/F");
@@ -387,7 +384,8 @@ GLSkimProcessor::process()
       electronsOut.setBranches(*eventList[iF]);
       eventList[iF]->Branch("electron.matchGen", electronsOut_matchGen, "matchGen[electron.size]/O");
     }
-    if(iF == oPhotonAndMuon || iF == oElePhotonAndMuon || iF == oFakePhotonAndMuon || iF == oPhotonAndFakeMuon){
+    if(iF == oPhotonAndMuon || iF == oElePhotonAndMuon || iF == oFakePhotonAndMuon || iF == oPhotonAndFakeMuon ||
+       iF == oPhotonAndDimuon || iF == oElePhotonAndDimuon || iF == oFakePhotonAndDimuon){
       muonsOut.setBranches(*eventList[iF]);
       eventList[iF]->Branch("muon.matchGen", muonsOut_matchGen, "matchGen[muon.size]/O");
     }
@@ -483,7 +481,7 @@ GLSkimProcessor::process()
       delete hltSFSource;
 
       TString effSourceName;
-      if(dataset.name.Contains("WG") || dataset.name.Contains("WW") || dataset.name.Contains("WJets")) effSourceName = "WGToLNuG";
+      if(dataset.name.Contains("WG") || dataset.name.Contains("WW") || dataset.name.Contains("WJets") || dataset.name.Contains("TChiwg")) effSourceName = "WGToLNuG";
       else if(dataset.name.Contains("ZG") || dataset.name.Contains("DY")) effSourceName = "ZGToLLG";
       else if(dataset.name.Contains("TT") || dataset.name.Contains("ttA") || dataset.name.Contains("T5wg")) effSourceName = "TTGJets";
       else throw std::logic_error("Efficiency table missing");
@@ -626,19 +624,19 @@ GLSkimProcessor::write()
 bool
 GLSkimProcessor::preprocess()
 {
-  // for(unsigned iP(0); iP != photons.size; ++iP){
-  //   unsigned iL(0);
-  //   for(; iL != muons.size; ++iL)
-  //     if(susy::deltaR(muons.eta[iL], muons.phi[iL], photons.eta[iP], photons.phi[iP]) < 0.3) break;
-  //   photon_muonIso[iP] = iL == muons.size;
-  //   iL = 0;
-  //   TVector3 caloPosition(photons.caloX[iL], photons.caloY[iL], photons.caloZ[iL]);
-  //   for(; iL != electrons.size; ++iL){
-  //     double dR(TVector3(electrons.caloX[iL], electrons.caloY[iL], electrons.caloZ[iL]).DeltaR(caloPosition));
-  //     if(dR > 0.02 && dR < 0.3) break;
-  //   }
-  //   photon_electronIso[iP] = iL == electrons.size;
-  // }
+  for(unsigned iP(0); iP != photons.size; ++iP){
+    unsigned iL(0);
+    for(; iL != muons.size; ++iL)
+      if(susy::deltaR(muons.eta[iL], muons.phi[iL], photons.eta[iP], photons.phi[iP]) < 0.3) break;
+    photon_muonIso[iP] = iL == muons.size;
+    TVector3 caloPosition(photons.caloX[iP], photons.caloY[iP], photons.caloZ[iP]);
+    iL = 0;
+    for(; iL != electrons.size; ++iL){
+      double dR(TVector3(electrons.caloX[iL], electrons.caloY[iL], electrons.caloZ[iL]).DeltaR(caloPosition));
+      if(dR > 0.02 && dR < 0.3) break;
+    }
+    photon_electronIso[iP] = iL == electrons.size;
+  }
 
   if(dataset.dataType != Dataset::kRealData){
     unsigned photonIndex[susy::NMAX];
@@ -690,6 +688,9 @@ GLSkimProcessor::preprocess()
   metJESUp = metJESUpV.Mod();
   metJESDown = metJESDownV.Mod();
 
+  metPhiJESUp = TVector2::Phi_mpi_pi(metJESUpV.Phi());
+  metPhiJESDown = TVector2::Phi_mpi_pi(metJESDownV.Phi());
+
   return true;
 }
 
@@ -733,10 +734,8 @@ GLSkimProcessor::processPhotonAndLepton(unsigned _outputType)
     photonsOut.push_back(photons.at(iP));
   }
 
-  if(photonsOut.size == 0) return;
-
-  if(_outputType == oPhotonAndElectron && cutflowE_) cutflowE_->Fill(cutflowE_->GetNbinsX() - 2.);
-  if(_outputType == oPhotonAndMuon && cutflowM_) cutflowM_->Fill(cutflowM_->GetNbinsX() - 2.);
+  // uncomment when switching to liso trees
+  // if(photonsOut.size == 0) return;
 
   if(_outputType == oPhotonAndElectron){
     electronsOut.clear();
@@ -780,6 +779,11 @@ GLSkimProcessor::processPhotonAndLepton(unsigned _outputType)
 
     if(muonsOut.size == 0) return;
   }
+
+  if(photonsOut.size == 0) return;
+
+  if(_outputType == oPhotonAndElectron && cutflowE_) cutflowE_->Fill(cutflowE_->GetNbinsX() - 2.);
+  if(_outputType == oPhotonAndMuon && cutflowM_) cutflowM_->Fill(cutflowM_->GetNbinsX() - 2.);
 
   scaleRelErr2 += photonRelErr * photonRelErr + electronRelErr * electronRelErr + muonRelErr * muonRelErr;
   scaleErr = effScale * std::sqrt(scaleRelErr2);

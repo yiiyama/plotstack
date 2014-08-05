@@ -152,19 +152,19 @@ class FloatingVGammaSearch(StackConfig):
 
             if fitter.fit(-1) != 0: continue
 
-            if iToy < 20:
-                stack = ROOT.THStack('stack', 'stack')
-                qcdTemplate = qcdHistogram.hWeighted.Clone('qcdTemplate')
-                qcdTemplate.Scale(qcdScale.getVal())
-                vgTemplate.Scale(vgScale.getVal())
-                qcdTemplate.SetFillColor(ROOT.kRed)
-                vgTemplate.SetFillColor(ROOT.kBlue)
-                stack.Add(qcdTemplate)
-                stack.Add(vgTemplate)
-                stack.Draw('HIST')
-                target.Draw('EP SAME')
-                canvas.Print('/afs/cern.ch/user/y/yiiyama/www/plots/TestM_fits/%d.pdf' % iToy)
-                qcdTemplate.Delete()
+#            if iToy < 20:
+#                stack = ROOT.THStack('stack', 'stack')
+#                qcdTemplate = qcdHistogram.hWeighted.Clone('qcdTemplate')
+#                qcdTemplate.Scale(qcdScale.getVal())
+#                vgTemplate.Scale(vgScale.getVal())
+#                qcdTemplate.SetFillColor(ROOT.kRed)
+#                vgTemplate.SetFillColor(ROOT.kBlue)
+#                stack.Add(qcdTemplate)
+#                stack.Add(vgTemplate)
+#                stack.Draw('HIST')
+#                target.Draw('EP SAME')
+#                canvas.Print('/afs/cern.ch/user/y/yiiyama/www/plots/TestM_fits/%d.pdf' % iToy)
+#                qcdTemplate.Delete()
 
             target.Delete()
             vgTemplate.Delete()

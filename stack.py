@@ -315,7 +315,7 @@ class Stack(object):
                 hUncert.SetBinContent(iX, 1.)
 
             hUncert.Draw('E2')
-            hUncert.GetYaxis().SetRangeUser(0.5, 1.5)
+            hUncert.GetYaxis().SetRangeUser(0., 2.)
             hUncert.GetYaxis().SetTitle('obs / bkg')
             hFrame = hUncert
             
