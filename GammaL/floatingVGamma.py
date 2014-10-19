@@ -90,23 +90,25 @@ class FloatingVGammaSearch(StackConfig):
             directory = outputDir.mkdir('TemplateFitError')
         directory.cd()
 
-        tree = ROOT.TTree('toys', 'Toys')
-        vg = array.array('d', [0.])
-        qcd = array.array('d', [0.])
-        targetContents = array.array('d', [0.] * self.tempDef.nx)
-        targetErrors = array.array('d', [0.] * self.tempDef.nx)
-        vgContents = array.array('d', [0.] * self.tempDef.nx)
-        vgErrors = array.array('d', [0.] * self.tempDef.nx)
+#        tree = ROOT.TTree('toys', 'Toys')
+#        vg = array.array('d', [0.])
+#        qcd = array.array('d', [0.])
+#        targetContents = array.array('d', [0.] * self.tempDef.nx)
+#        targetErrors = array.array('d', [0.] * self.tempDef.nx)
+#        vgContents = array.array('d', [0.] * self.tempDef.nx)
+#        vgErrors = array.array('d', [0.] * self.tempDef.nx)
 
-        tree.Branch('vg', vg, 'vg/D')
-        tree.Branch('qcd', qcd, 'qcd/D')
-        tree.Branch('targetContents', targetContents, 'content[%d]/D' % self.tempDef.nx)
-        tree.Branch('targetErrors', targetErrors, 'error[%d]/D' % self.tempDef.nx)
-        tree.Branch('vgContents', vgContents, 'content[%d]/D' % self.tempDef.nx)
-        tree.Branch('vgErrors', vgErrors, 'error[%d]/D' % self.tempDef.nx)
+#        tree.Branch('vg', vg, 'vg/D')
+#        tree.Branch('qcd', qcd, 'qcd/D')
+#        tree.Branch('targetContents', targetContents, 'content[%d]/D' % self.tempDef.nx)
+#        tree.Branch('targetErrors', targetErrors, 'error[%d]/D' % self.tempDef.nx)
+#        tree.Branch('vgContents', vgContents, 'content[%d]/D' % self.tempDef.nx)
+#        tree.Branch('vgErrors', vgErrors, 'error[%d]/D' % self.tempDef.nx)
             
         vgScales = []
         qcdScales = []
+        vgScalesNoEff = []
+        qcdScalesNoEff = []
 
         def modifyTemplate(histogram, sigma, name = 'template'):
             result = histogram.hWeighted.Clone(name)
@@ -140,11 +142,11 @@ class FloatingVGammaSearch(StackConfig):
 
             vgTemplate = modifyTemplate(vgHistogram, effScaleVar, 'vg')
 
-            for iX in range(self.tempDef.nx):
-                targetContents[iX] = target.GetBinContent(iX + 1)
-                targetErrors[iX] = target.GetBinError(iX + 1)
-                vgContents[iX] = vgTemplate.GetBinContent(iX + 1)
-                vgErrors[iX] = vgTemplate.GetBinError(iX + 1)
+#            for iX in range(self.tempDef.nx):
+#                targetContents[iX] = target.GetBinContent(iX + 1)
+#                targetErrors[iX] = target.GetBinError(iX + 1)
+#                vgContents[iX] = vgTemplate.GetBinContent(iX + 1)
+#                vgErrors[iX] = vgTemplate.GetBinError(iX + 1)
 
             fitter.setTarget(target)
             fitter.addTemplate(vgTemplate, 'vg', vgScale)
@@ -152,53 +154,64 @@ class FloatingVGammaSearch(StackConfig):
 
             if fitter.fit(-1) != 0: continue
 
-#            if iToy < 20:
-#                stack = ROOT.THStack('stack', 'stack')
-#                qcdTemplate = qcdHistogram.hWeighted.Clone('qcdTemplate')
-#                qcdTemplate.Scale(qcdScale.getVal())
-#                vgTemplate.Scale(vgScale.getVal())
-#                qcdTemplate.SetFillColor(ROOT.kRed)
-#                vgTemplate.SetFillColor(ROOT.kBlue)
-#                stack.Add(qcdTemplate)
-#                stack.Add(vgTemplate)
-#                stack.Draw('HIST')
-#                target.Draw('EP SAME')
-#                canvas.Print('/afs/cern.ch/user/y/yiiyama/www/plots/TestM_fits/%d.pdf' % iToy)
-#                qcdTemplate.Delete()
+            vgScales.append(vgScale.getVal())
+            qcdScales.append(qcdScale.getVal())
+
+#            vg[0] = vgScale.getVal()
+#            qcd[0] = qcdScale.getVal()
+#            tree.Fill()
+
+            vgTemplate.Delete()
+
+            vgTemplate = modifyTemplate(vgHistogram, 0., 'vg')
+
+            fitter.setTarget(target)
+            fitter.addTemplate(vgTemplate, 'vg', vgScale)
+            fitter.addTemplate(qcdHistogram.hWeighted, 'qcd', qcdScale)
+
+            if fitter.fit(-1) != 0: continue
+
+            vgScalesNoEff.append(vgScale.getVal())
+            qcdScalesNoEff.append(qcdScale.getVal())
 
             target.Delete()
             vgTemplate.Delete()
 
-            vgScales.append(vgScale.getVal())
-            qcdScales.append(qcdScale.getVal())
-
-            vg[0] = vgScale.getVal()
-            qcd[0] = qcdScale.getVal()
-
-            tree.Fill()
-
         sys.stdout.write('\n')
 
         directory.cd()
-        tree.Write()
+#        tree.Write()
 
-        for scales, central, centralErr, name in [(vgScales, vgCentral, vgCentralErr, 'VGamma'), (qcdScales, qcdCentral, qcdCentralErr, 'QCD')]:
+        for scales, scalesNoEff, central, centralErr, name in [(vgScales, vgScalesNoEff, vgCentral, vgCentralErr, 'VGamma'), (qcdScales, qcdScalesNoEff, qcdCentral, qcdCentralErr, 'QCD')]:
             scales.sort()
             err = scales[int(len(scales) * 0.84)] - central
             errHigh = math.sqrt(err * err + centralErr * centralErr)
             err = central - scales[int(len(scales) * 0.16)]
             errLow = math.sqrt(err * err + centralErr * centralErr)
 
-            if name == 'VGamma':
-                vgErrHigh = errHigh
-                vgErrLow = errLow
-        
             graph = ROOT.TGraphAsymmErrors(1)
             graph.SetPoint(0, 0., central)
             graph.SetPointEYhigh(0, errHigh)
             graph.SetPointEYlow(0, errLow)
             directory.cd()
             graph.Write(name)
+
+            scalesNoEff.sort()
+            err = scalesNoEff[int(len(scalesNoEff) * 0.84)] - central
+            errHigh = math.sqrt(err * err + centralErr * centralErr)
+            err = central - scalesNoEff[int(len(scalesNoEff) * 0.16)]
+            errLow = math.sqrt(err * err + centralErr * centralErr)
+
+            graph = ROOT.TGraphAsymmErrors(1)
+            graph.SetPoint(0, 0., central)
+            graph.SetPointEYhigh(0, errHigh)
+            graph.SetPointEYlow(0, errLow)
+            directory.cd()
+            graph.Write(name + 'NoEff')
+
+            if name == 'VGamma':
+                vgErrHigh = errHigh
+                vgErrLow = errLow
 
         ### SET SCALES AND ERRORS
 

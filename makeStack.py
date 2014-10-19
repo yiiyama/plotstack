@@ -196,8 +196,15 @@ if __name__ == '__main__':
     parser.add_option('-s', '--only-stack', action = 'store_true', dest = 'onlyStack', help = 'Only make stack from existing group histograms.')
     parser.add_option('-f', '--set-flags', dest = 'setFlags', default = '', help = 'Set plot flags.')
     parser.add_option('-L', '--integrated-lumi', dest = 'integratedLumi', default = -1., help = 'Integrated luminosity to normalize to in 1/pb.')
+    parser.add_option('-l', '--list-config', action = 'store_true', dest = 'listConfig', help = 'Print list of configurations and exit.')
+    parser.add_option('-d', '--print-datasets', action = 'store_true', dest = 'printDatasets', help = 'Print list of datasets for the configuration and exit.')
 
     options, args = parser.parse_args()
+
+    if options.listConfig:
+        for conf in sorted(stackConfigs.keys()):
+            print conf
+        sys.exit(0)
 
     if len(args) != 1:
         parser.print_usage()
@@ -209,6 +216,21 @@ if __name__ == '__main__':
         
     stackName = args[0]
     config = stackConfigs[stackName]
+
+    if options.printDatasets:
+        dsList = []
+        for group in config.groups:
+            for sample in group.samples:
+                dsList.append(sample.dataset)
+
+        dsList = list(set(dsList))
+
+        output = ''
+        for dataset in dsList:
+            output += dataset.name + ' '
+
+        print output
+        sys.exit(0)
 
     if options.histoSource:
         def copyDir(sourceDir, targetDir):

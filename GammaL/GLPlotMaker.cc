@@ -1,6 +1,7 @@
 #include "TVector2.h"
 #include "TVector3.h"
 #include "TLorentzVector.h"
+#include "TF1.h"
 
 #include "../../CommonCode/ObjectTree.h"
 #include "../../CommonCode/Utilities.h"
@@ -16,9 +17,10 @@ public:
   int matchLepton;
   bool vetoZ;
   bool dilepton;
-  bool met40;
+  //  bool met40;
   bool effCorrection;
   int jesShift;
+  TF1* ptlWeight;
 
   GLPlotMaker(int f) :
     PlotMaker(),
@@ -27,9 +29,10 @@ public:
     matchLepton(0),
     vetoZ(true),
     dilepton(false),
-    met40(false),
+    //    met40(false),
     effCorrection(true),
-    jesShift(0)
+    jesShift(0),
+    ptlWeight(0)
   {
   }
 
@@ -42,10 +45,11 @@ public:
   void vetoTrueLepton() { matchLepton = -1; }
   void useZ() { vetoZ = false; }
   void dileptonOnly() { dilepton = true; }
-  void cutMet() { met40 = true; }
+  //  void cutMet() { met40 = true; }
   void noEffCorrection() { effCorrection = false; }
   void shiftJESUp() { jesShift = 1; }
   void shiftJESDown() { jesShift = -1; }
+  void setLeptonPtWeight(TF1* _f) { ptlWeight = _f; }
 
   void run()
   {
@@ -196,20 +200,19 @@ public:
           eventWeight *= effScale;
           wgtRelErr2 += scaleErr * scaleErr / effScale / effScale;
         }
+        if(ptlWeight) eventWeight *= ptlWeight->Eval(lepton_pt[0]);
         eventWeightErr = eventWeight * std::sqrt(wgtRelErr2);
 
-        bool failMet(met40 && met < 40.);
-        bool failMass(vetoZ && leptonFlavor == 0 && mass2 > 81. && mass2 < 101.);
+        fill("Mass2", mass2);
+        fill("Mass2Wide", mass2);
 
-        if(!failMet){
-          fill("Mass2", mass2);
-          fill("Mass2Wide", mass2);
-        }
+        if(vetoZ && leptonFlavor == 0 && mass2 > 81. && mass2 < 101.) continue;
 
-        if(!failMass){
-          fill("Met", met);
-          fill("MetMt", met, mt);
-        }
+        countEvent();
+
+        fill("Met", met);
+        fill("MetMt", met, mt);
+        if(mt > 100.) fill("MetHighMt", met);
 
         unsigned nJet(0);
         double ht(0.);
@@ -240,17 +243,15 @@ public:
             }
           }
 
-          if(!failMet && !failMass){
-            if(iMinGJ != -1){
-              fill("DPhiPhotonJet", TVector2::Phi_mpi_pi(photons.phi[0] - jets.phi[iMinGJ]));
-              fill("DEtaPhotonJet", photons.eta[0] - jets.eta[iMinGJ]);
-              fill("DRPhotonJet", minDRGJ);
-            }
-            if(iMinLJ != -1){
-              fill("DPhiLeptonJet", TVector2::Phi_mpi_pi(lepton_phi[0] - jets.phi[iMinLJ]));
-              fill("DEtaLeptonJet", lepton_eta[0] - jets.eta[iMinLJ]);
-              fill("DRLeptonJet", minDRLJ);
-            }
+          if(iMinGJ != -1){
+            fill("DPhiPhotonJet", TVector2::Phi_mpi_pi(photons.phi[0] - jets.phi[iMinGJ]));
+            fill("DEtaPhotonJet", photons.eta[0] - jets.eta[iMinGJ]);
+            fill("DRPhotonJet", minDRGJ);
+          }
+          if(iMinLJ != -1){
+            fill("DPhiLeptonJet", TVector2::Phi_mpi_pi(lepton_phi[0] - jets.phi[iMinLJ]));
+            fill("DEtaLeptonJet", lepton_eta[0] - jets.eta[iMinLJ]);
+            fill("DRLeptonJet", minDRLJ);
           }
         }
 
@@ -267,34 +268,35 @@ public:
                         TVector3(pl.X() + metV.X(), pl.Y() + metV.Y(), pl.Z() + (pl.Z() * mu2 + PS) / 2 / pl.Perp2()).Mag());
         }
 
-        if(!failMass && pw > 0. && pw < 200.) fill("MetLowPW", met);
-
         if(photons.pt[0] < 80.){
-          if(mt > 100.)
-            fill("MetHighMtLowPhotonPt", met);
-          else
-            fill("MetLowMtLowPhotonPt", met);
+          if(mt > 100.){
+            if(ht > 400.)
+              fill("MetHighMtHighHtLowPhotonPt", met);
+            else if(ht > 100.)
+              fill("MetHighMtMidHtLowPhotonPt", met);
+            else
+              fill("MetHighMtLowHtLowPhotonPt", met);
+          }
         }
         else{
           if(mt > 100.){
-            fill("MetHighMtHighPhotonPt", met);
             if(ht > 400.)
               fill("MetHighMtHighHtHighPhotonPt", met);
+            else if(ht > 100.)
+              fill("MetHighMtMidHtHighPhotonPt", met);
             else
               fill("MetHighMtLowHtHighPhotonPt", met);
           }
+          
+          if(lepton_size > 1){
+            if(ht > 400.)
+              fill("MetDiLepHighHtHighPhotonPt", met);
+            else if(ht > 100.)
+              fill("MetDiLepMidHtHighPhotonPt", met);
+            else
+              fill("MetDiLepLowHtHighPhotonPt", met);
+          }
         }
-
-        if(mt > 100.){
-          if(ht > 400.)
-            fill("MetHighMtHighHt", met);
-          else
-            fill("MetHighMtLowHt", met);
-        }
-
-        if(failMet || failMass) continue;
-
-        countEvent();
 
         fill("NPhoton", photons.size);
         fill("NLepton", lepton_size);
@@ -336,6 +338,7 @@ public:
 
         fill("NJet", nJet);
         fill("Ht", ht);
+        if(met > 120. && mt > 100.) fill("HtHighMetHighMt", ht);
 
         fill("PW", pw);
 
@@ -347,6 +350,7 @@ public:
 
         if(met > 120.){
           fill("PhotonPtHighMet", photons.pt[0]);
+          if(mt > 100.) fill("PhotonPtHighMetHighMt", photons.pt[0]);
           fill("LeptonPtHighMet", lepton_pt[0]);
         }
 
@@ -356,9 +360,12 @@ public:
           fill("LeptonPtLowMet", lepton_pt[0]);
           fill("NJetLowMet", jets.size);
 
-          fill("DRPhotonLeptonLowMet", dRGL);
-          fill("DPhiPhotonMetLowMet", dPhiGM);
-          fill("DPhiLeptonMetLowMet", dPhiLM);
+          if(met > 40.){
+            fill("DRPhotonLeptonMet4070", dRGL);
+            fill("DPhiPhotonLeptonMet4070", dPhiGL);
+            fill("DPhiPhotonMetMet4070", dPhiGM);
+            fill("DPhiLeptonMetMet4070", dPhiLM);
+          }
 
           if(mll > 81. && mll < 101.)
             fill("PhotonPtLowMetOnZ", photons.pt[0]);
@@ -368,20 +375,6 @@ public:
             fill("Mass3LowMet", mass3);
             fill("MuonPtLowMet", lepton_pt[0]);
             fill("MuonPtLowMet", lepton_pt[1]);
-          }
-        }
-
-        if(photons.pt[0] < 80.){
-          if(met < 70.){
-            fill("MtLowMetLowPhotonPt", mt);
-            fill("HtLowMetLowPhotonPt", ht);
-          }
-        }
-        else{
-          if(met > 120.){
-            fill("MtHighMetHighPhotonPt", mt);
-            if(mt > 100.)
-              fill("HtHighMtHighMetHighPhotonPt", ht);
           }
         }
 

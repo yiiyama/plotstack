@@ -1,8 +1,9 @@
 import math
+import array
 import ROOT
 
 from dataset import Dataset
-from plotflags import USESIGNIFICANCE
+from plotflags import USESIGNIFICANCE, NOEXPOVERFLOW
 
 def drawPave(pave, onRight = True):
     if onRight:
@@ -102,8 +103,8 @@ class Stack(object):
         self.bkgHistogram.SetLineWidth(0)
         self.bkgHistogram.SetMarkerSize(0)
         self.bkgHistogram.SetMarkerStyle(0)
-        self.bkgHistogram.SetFillStyle(3003)
-        self.bkgHistogram.SetFillColor(ROOT.kPink)
+        self.bkgHistogram.SetFillStyle(3004)
+        self.bkgHistogram.SetFillColor(ROOT.kGray + 1)
         self.obsHistogram = None
         self.obsRawHistogram = None
 
@@ -143,31 +144,46 @@ class Stack(object):
             self.draw2D(plotsDir, texts, arbitraryUnit, maskObserved, drawEmpty)
 
     def draw1D(self, plotsDir, texts, arbitraryUnit, maskObserved, drawEmpty):
+        obsGroup = next(group for group in self.groups if group.category == Group.OBSERVED)
         bkgGroups = filter(lambda x: x.category == Group.BACKGROUND, self.groups)
         sigGroups = filter(lambda x: x.category == Group.SIGNAL, self.groups)
+
+        if abs(self.obsHistogram.GetSumOfWeights() / self.obsRawHistogram.GetSumOfWeights() - 1.) > 1.e-5:
+            # histogram is weighted
+            obs = ROOT.TGraphAsymmErrors(self.obsHistogram)
+        else:
+            obs = ROOT.RooHist(self.obsRawHistogram, 1.)
+            if self.hdef.overflowable:
+                iP = obs.GetN() - 1
+                cont = self.obsRawHistogram.GetBinContent(iP + 1)
+                obs.SetPoint(iP, obs.GetX()[iP], cont)
+                ylow = ROOT.Double()
+                yhigh = ROOT.Double()
+                ROOT.RooHistError.instance().getPoissonInterval(int(cont), ylow, yhigh, 1.)
+                obs.SetPointEYhigh(iP, yhigh - cont)
+                obs.SetPointEYlow(iP, cont - ylow)
+
+        # Bug in ROOT? Solution based on simple SetRange causes the overflow bin content to migrate to the last bin in some histograms..
+        if NOEXPOVERFLOW and self.hdef.overflowable and obs.GetY()[obs.GetN() - 1] == 0.:
+            obs.Set(obs.GetN() - 1)
+            binEdges = array.array('d', [self.bkgHistogram.GetXaxis().GetXbins()[i] for i in range(self.bkgHistogram.GetNbinsX())])
+            self.bkgHistogram.SetBins(self.bkgHistogram.GetNbinsX() - 1, binEdges)
+            for group in bkgGroups + sigGroups:
+                self.histograms[group].SetBins(self.histograms[group].GetNbinsX() - 1, binEdges)
+
+            self.hdef.ytitle.replace(' (last bin: overflow events)', '')
 
         stack = ROOT.THStack(self.name, self.hdef.title)
 
         for group in bkgGroups:
             stack.Add(self.histograms[group])
 
-        obs = ROOT.RooHist(self.obsRawHistogram, 1.)
         obs.SetName(self.name + '_obsGraph')
         obs.SetLineColor(ROOT.kBlack)
         obs.SetMarkerStyle(8)
         obs.SetMarkerSize(0.6)
         obs.SetMarkerColor(ROOT.kBlack)
         obs.SetFillStyle(0)
-
-        if self.hdef.overflowable:
-            iP = obs.GetN() - 1
-            cont = self.obsRawHistogram.GetBinContent(iP + 1)
-            obs.SetPoint(iP, obs.GetX()[iP], cont)
-            ylow = ROOT.Double()
-            yhigh = ROOT.Double()
-            ROOT.RooHistError.instance().getPoissonInterval(int(cont), ylow, yhigh, 1.)
-            obs.SetPointEYhigh(iP, yhigh - cont)
-            obs.SetPointEYlow(iP, cont - ylow)
 
         canvas = ROOT.TCanvas(self.name, self.hdef.title)
 
@@ -193,7 +209,7 @@ class Stack(object):
         legend.ConvertNDCtoPad()
 
         if self.obsHistogram and self.obsHistogram.GetSumOfWeights() > 0.:
-            legend.AddEntry(obs, 'Observed', 'LP')
+            legend.AddEntry(obs, obsGroup.name, 'LP')
 
         for group in reversed(bkgGroups):
             legend.AddEntry(self.histograms[group], group.title, 'F')
@@ -311,8 +327,10 @@ class Stack(object):
 
         ratioPad.cd()
 
+        arrow = ROOT.TArrow(0., 0., 0., 0., 0.01, '|>')
+
         if USESIGNIFICANCE:
-            gDiff = obs.Clone(self.name + '_diff')
+            gObs = obs.Clone(self.name + '_diff')
 
             for iX in range(1, self.hdef.nx + 1):
                 if self.obsHistogram.GetBinContent(iX) == 0.: continue
@@ -323,16 +341,19 @@ class Stack(object):
                     bkgErr = 1. / self.bkgHistogram.GetXaxis().GetBinWidth(iX)
 
                 iP = iX - 1
-                gDiff.SetPoint(iP, obs.GetX()[iP], (obs.GetY()[iP] - bkg) / bkgErr)
-                gDiff.SetPointEYhigh(iP, obs.GetErrorYhigh(iP) / bkgErr)
-                gDiff.SetPointEYlow(iP, obs.GetErrorYlow(iP) / bkgErr)
+                gObs.SetPoint(iP, obs.GetX()[iP], (obs.GetY()[iP] - bkg) / bkgErr)
+                gObs.SetPointEYhigh(iP, obs.GetErrorYhigh(iP) / bkgErr)
+                gObs.SetPointEYlow(iP, obs.GetErrorYlow(iP) / bkgErr)
 
-            gDiff.Draw('APZ')
-            gDiff.GetYaxis().SetRangeUser(-3., 3.)
-            gDiff.GetYaxis().SetTitle('(obs - bkg) / #delta_{bkg}')
-            hFrame = gDiff.GetHistogram()
+            gObs.Draw('APZ')
+            gObs.GetYaxis().SetTitle('(obs - bkg) / #delta_{bkg}')
+
+            hFrame = gObs.GetHistogram()
+            hFrame.SetMinimum(-3.)
+            hFrame.SetMaximum(3.)
 
             line = ROOT.TLine(self.obsHistogram.GetXaxis().GetXmin(), 0., self.obsHistogram.GetXaxis().GetXmax(), 0.)
+
         else:
             hUncert = self.bkgHistogram.Clone(self.name + '_uncert')
             for iX in range(1, self.hdef.nx + 1):
@@ -342,11 +363,13 @@ class Stack(object):
                 hUncert.SetBinContent(iX, 1.)
 
             hUncert.Draw('E2')
-            hUncert.GetYaxis().SetRangeUser(0., 2.)
             hUncert.GetYaxis().SetTitle('obs / bkg')
-            hFrame = hUncert
 
-            gRatio = obs.Clone(self.name + '_ratio')
+            hFrame = hUncert
+            hFrame.SetMinimum(0.)
+            hFrame.SetMaximum(2.)
+
+            gObs = obs.Clone(self.name + '_ratio')
 
             for iX in range(1, self.hdef.nx + 1):
                 bkg = self.bkgHistogram.GetBinContent(iX)
@@ -354,13 +377,17 @@ class Stack(object):
                 if bkg == 0.: continue
 
                 iP = iX - 1
-                gRatio.SetPoint(iP, obs.GetX()[iP], obs.GetY()[iP] / bkg)
-                gRatio.SetPointEYhigh(iP, obs.GetErrorYhigh(iP) / bkg)
-                gRatio.SetPointEYlow(iP, obs.GetErrorYlow(iP) / bkg)
+                gObs.SetPoint(iP, obs.GetX()[iP], obs.GetY()[iP] / bkg)
+                gObs.SetPointEYhigh(iP, obs.GetErrorYhigh(iP) / bkg)
+                gObs.SetPointEYlow(iP, obs.GetErrorYlow(iP) / bkg)
 
-            gRatio.Draw('PZ')
+            gObs.Draw('PZ')
 
             line = ROOT.TLine(hUncert.GetXaxis().GetXmin(), 1., hUncert.GetXaxis().GetXmax(), 1.)
+
+        for iP in range(gObs.GetN()):
+            if gObs.GetY()[iP] > hFrame.GetMaximum():
+                arrow.DrawArrow(gObs.GetX()[iP], line.GetY1(), gObs.GetX()[iP], hFrame.GetMaximum() * 0.95)
 
         line.Draw()
 
@@ -375,6 +402,8 @@ class Stack(object):
         canvas.SaveAs(plotsDir + "/" + self.name + ".pdf")
 
     def draw2D(self, plotsDir, texts, arbitraryUnit, maskObserved, drawEmpty):
+        obsGroup = next(group for group in self.groups if group.category == Group.OBSERVED)
+
         drawOption = self.hdef.drawOption.upper()
         if not drawOption:
             drawOption = 'COLZ'
@@ -418,7 +447,7 @@ class Stack(object):
 
             if self.obsHistogram and (drawEmpty or self.obsHistogram.GetSumOfWeights() > 0.):
                 self.obsHistogram.Draw(drawOption + ' SAME')
-                legend.AddEntry(self.obsHistogram, 'Observed', 'L')
+                legend.AddEntry(self.obsHistogram, obsGroup.name, 'L')
     
             legend.Draw()
 

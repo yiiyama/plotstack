@@ -1,6 +1,6 @@
-sourceDir = 'rooth://ncmu40//store/glskim_cflow'
-eventListDir = 'rooth://ncmu40//store/glweighted_eiso'
+sourceDir = 'rooth://ncmu40//store/glskim'
+eventListDir = 'rooth://ncmu40//store/wgweighted'
 plotsDir = '/afs/cern.ch/user/y/yiiyama/www/plots'
-plotsOutputDir = '/afs/cern.ch/user/y/yiiyama/output/GammaL/main'
+plotsOutputDir = '/afs/cern.ch/user/y/yiiyama/output/GammaL/wgamma'
 
-analysis = 'GammaL'
+analysis = 'WGamma'

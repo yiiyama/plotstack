@@ -10,7 +10,7 @@ from histogram import HDef
 from stack import Group, StackConfig
 from weightEvents import weightEvents
 from makeStack import fillPlots, formGroups
-from config import hdefList
+from config import searchPlots
 
 thisdir = os.path.dirname(os.path.abspath(__file__))
 
@@ -22,16 +22,14 @@ class SignalStack(StackConfig):
         self.jlClass = 'PhotonAndFake' + lepton
         self.candClass = 'PhotonAnd' + lepton
 
-        source = ROOT.TFile('/afs/cern.ch/user/y/yiiyama/output/GammaL/main/simulFit.root')
         if lepton == 'Electron':
-            self.jlScale = source.Get('elQCD').GetY()[0]
+            source = ROOT.TFile('/afs/cern.ch/user/y/yiiyama/output/GammaL/main/FloatingVGammaE.root')
+            self.jlScale = source.Get('TemplateFitError/QCD').GetY()[0]
         elif lepton == 'Muon':
-            self.jlScale = source.Get('muQCD').GetY()[0]
+            source = ROOT.TFile('/afs/cern.ch/user/y/yiiyama/output/GammaL/main/FloatingVGammaM.root')
+            self.jlScale = source.Get('TemplateFitError/QCD').GetY()[0]
 
-        self.hdefs = [
-            hdefList['MetHighMtLowPhotonPt'],
-            hdefList['MetHighMtHighPhotonPt']
-        ]
+        self.hdefs = searchPlots
 
     def scalePlots(self, outputDir):
         for group in self.groups: # should only be one
@@ -47,10 +45,10 @@ class SignalStack(StackConfig):
                         histogram.hScaleDown.Scale(-1.)
 
 
-def countSignal(model, mass):
+def getDataset(model, mass):
     point = model + '_' + mass
-    
-    with open('/afs/cern.ch/user/y/yiiyama/src/GammaL/xsec/' + model + '.xsecs') as xsecsource:
+
+    with open('/afs/cern.ch/user/y/yiiyama/output/GammaL/limits/xsecs/' + model + '.xsecs') as xsecsource:
         for line in xsecsource:
             p, c, u, n = line.strip().split()
             if p == point:
@@ -59,16 +57,39 @@ def countSignal(model, mass):
                 break
         else:
             raise RuntimeError('No point ' + point + ' found')
+
+    if nEvents == 0:
+        return None
+
+    eventClasses = [
+        'PhotonAndElectron',
+        'ElePhotonAndElectron',
+        'FakePhotonAndElectron',
+        'PhotonAndFakeElectron',
+        'PhotonAndMuon',
+        'ElePhotonAndMuon',
+        'FakePhotonAndMuon',
+        'PhotonAndFakeMuon'
+    ]
+
+    return Dataset(point, [model + '/skim_' + mass], Dataset.FASTSIM, nEvents / xsec, 0., eventClasses)
+
+def countSignal(model, mass, treeDir):
+    point = model + '_' + mass
+
+    dataset = getDataset(model, mass)
+    if not dataset: return
     
     eventWeights = {}
     eventWeights['default'] = ROOT.GLEventWeight()
-    eventWeights['eg'] = ROOT.ElePhotonFunctionalWeight()
+    eventWeights['egHLT'] = ROOT.ElePhotonFunctionalWeight()
+    eventWeights['eg'] = ROOT.ElePhotonFunctionalWeight(True)
     eventWeights['jgHLT'] = ROOT.JetPhotonHLTIsoWeight()
     eventWeights['jg'] = ROOT.JetPhotonWeight()
     
-    eventweights = {
+    weightCalcList = {
         'PhotonAndElectron': eventWeights['default'],
-        'ElePhotonAndElectron': eventWeights['eg'],
+        'ElePhotonAndElectron': eventWeights['egHLT'],
         'FakePhotonAndElectron': eventWeights['jgHLT'],
         'PhotonAndFakeElectron': eventWeights['default'],
         'PhotonAndMuon': eventWeights['default'],
@@ -77,46 +98,87 @@ def countSignal(model, mass):
         'PhotonAndFakeMuon': eventWeights['default']
     }
     
-    dataset = Dataset(point, [model + '/skim_' + mass], Dataset.FASTSIM, nEvents / xsec, 0., eventweights.keys())
-    
-    weightCalc = dict([(dataset.samples[s], w) for s, w in eventweights.items()])
-    
-    weightEvents(dataset, ROOT.GLSkimProcessor, weightCalc, sourceDir, os.environ['TMPDIR'] + '/countSignal/trees')
-    
-    outputFile = ROOT.TFile(os.environ['TMPDIR'] + '/countSignal/plots/' + point + '.root', 'recreate')
-    
-    for iL, lepton, Lnorm in [(0, 'Electron', 876.225 + 4411.704 + 7054.732 + 7369.007), (1, 'Muon', 876.225 + 4411.704 + 7054.732 + 7360.046)]:
-        plotMaker = ROOT.GLPlotMaker(iL)
-    
-        config = SignalStack(plotMaker, lepton)
-        config.groups = [
-            Group(point, point, ROOT.kBlack, Group.SIGNAL, [
-                dataset.samples['PhotonAnd' + lepton],
-                dataset.samples['ElePhotonAnd' + lepton],
-                dataset.samples['FakePhotonAnd' + lepton],
-                dataset.samples['PhotonAndFake' + lepton]
-            ])
-        ]
+    weightCalc = dict([(dataset.samples[s], w) for s, w in weightCalcList.items()])
+        
+    weightEvents(dataset, ROOT.GLSkimProcessor, weightCalc, sourceDir, treeDir)
 
-        directory = outputFile.mkdir(lepton)
-    
-        fillPlots(config, os.environ['TMPDIR'] + '/countSignal/trees', directory, integratedLumi = Lnorm)
-        formGroups(config, directory)
-    
-    outputFile.Close()
 
 if __name__ == '__main__':
 
+    from optparse import OptionParser
+
+    parser = OptionParser(usage = 'Usage: countSignal.py [options]')
+
+    parser.add_option('-p', '--point', dest = 'point', default = '', help = 'Process single point')
+    parser.add_option('-m', '--model', dest = 'model', default = '', help = 'Model to process')
+
+    options, args = parser.parse_args()
+
+    treeDir = os.environ['TMPDIR'] + '/countSignal'
     try:
-        os.makedirs(os.environ['TMPDIR'] + '/countSignal/trees')
-        os.makedirs(os.environ['TMPDIR'] + '/countSignal/plots')
+        os.makedirs(treeDir)
     except OSError:
         pass
 
-    for mglu in range(400, 1550, 50):
-        if mglu >= 800 and mglu < 1000: continue
-        if mglu >= 1350: continue
-        for mchi in range(25, mglu, 50):
-            pointName = '{mglu}_{mchi}'.format(mglu = mglu, mchi = mchi)
-            print pointName
-            countSignal('T5wg', pointName)
+    models = []
+    if options.model:
+        if options.point:
+            countSignal(options.model, options.point, treeDir)
+
+        else:
+            models.append(options.model)
+
+    else:
+        if options.point:
+            raise RuntimeError('Point given without model')
+
+        models = ['T5wg', 'TChiwg', 'Spectra_gW']
+
+    if 'T5wg' in models:
+        try:
+            os.makedirs(treeDir + '/T5wg')
+        except OSError:
+            pass
+
+        for mglu in range(400, 1550, 50):
+            for mchi in range(25, mglu, 50):
+                pointName = '{mglu}_{mchi}'.format(mglu = mglu, mchi = mchi)
+                print 'T5wg_' + pointName
+                countSignal('T5wg', pointName, treeDir + '/T5wg')
+
+    if 'TChiwg' in models:
+        try:
+            os.makedirs(treeDir + '/TChiwg')
+        except OSError:
+            pass
+
+        for mchi in range(100, 810, 10):
+            pointName = str(mchi)
+            print 'TChiwg_' + pointName
+            countSignal('TChiwg', pointName, treeDir + '/TChiwg')
+        
+    if 'TChiwgSuppl' in models:
+        try:
+            os.makedirs(treeDir + '/TChiwg')
+        except OSError:
+            pass
+
+        for mchi in range(125, 1625, 50):
+            pointName = str(mchi)
+            print 'TChiwg_' + pointName
+            countSignal('TChiwg', pointName, treeDir + '/TChiwg')
+
+    if 'Spectra_gW' in models:
+        try:
+            os.makedirs(treeDir + '/Spectra_gW')
+        except OSError:
+            pass
+
+        for m3 in range(715, 1565, 50):
+            for m2 in range(205, m3, 50):
+                for proc in ['gg', 'ncp', 'ncm']:
+                    pointName = 'M3_{m3}_M2_{m2}_{proc}'.format(m3 = m3, m2 = m2, proc = proc)
+                    print 'Spectra_gW_' + pointName
+                    countSignal('Spectra_gW', pointName, treeDir + '/Spectra_gW')
+
+    print 'Signal trees and plots are created in', treeDir, '- do not forget to copy them back!'

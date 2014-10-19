@@ -63,7 +63,11 @@ if __name__ == '__main__':
                         if re.match(name.replace('*', '.*'), dsName):
                             dsList.append(ds)
                 else:
-                    dsList.append(datasets[name])
+                    try:
+                        dsList.append(datasets[name])
+                    except KeyError:
+                        print 'Dataset', name, 'not defined'
+                        raise
 
         if len(dsList) == 0:
             raise Exception()
