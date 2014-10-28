@@ -5,13 +5,21 @@ import ROOT
 from dataset import Dataset
 from plotflags import USESIGNIFICANCE, NOEXPOVERFLOW
 
+def makePaveText():
+    pave = ROOT.TPaveText()
+    pave.SetTextFont(62)
+    pave.SetTextSize(0.035)
+    pave.SetBorderSize(0)
+    pave.SetFillStyle(0)
+    return pave
+
 def drawPave(pave, onRight = True):
     if onRight:
-        pave.SetX1NDC(0.69)
-        pave.SetX2NDC(0.87)
+        pave.SetX1NDC(0.62)
+        pave.SetX2NDC(0.95)
     else:
-        pave.SetX1NDC(0.1)
-        pave.SetX2NDC(0.28)
+        pave.SetX1NDC(0.15)
+        pave.SetX2NDC(0.48)
 
     pave.Draw()
     pave.SetDrawOption(' ')
@@ -101,6 +109,7 @@ class Stack(object):
         self.histograms = {}
         self.bkgHistogram = self.hdef.generate('bkg')
         self.bkgHistogram.SetLineWidth(0)
+        self.bkgHistogram.SetLineColor(ROOT.kGray + 1)
         self.bkgHistogram.SetMarkerSize(0)
         self.bkgHistogram.SetMarkerStyle(0)
         self.bkgHistogram.SetFillStyle(3004)
@@ -114,7 +123,7 @@ class Stack(object):
         histogram.SetLineColor(group.color)
         if group.category == Group.OBSERVED:
             histogram.SetMarkerStyle(8)
-            histogram.SetMarkerSize(0.4)
+            histogram.SetMarkerSize(0.8)
             histogram.SetMarkerColor(group.color)
             histogram.SetFillStyle(0)
 
@@ -137,18 +146,26 @@ class Stack(object):
 
         self.histograms[group] = histogram
     
-    def draw(self, plotsDir, texts = [], arbitraryUnit = False, maskObserved = False, drawEmpty = False):
-        if self.hdef.dimension == 1:
-            self.draw1D(plotsDir, texts, arbitraryUnit, maskObserved, drawEmpty)
-        else:
-            self.draw2D(plotsDir, texts, arbitraryUnit, maskObserved, drawEmpty)
+    def draw(self, plotsDir, title = '', arbitraryUnit = False, maskObserved = False, drawEmpty = False):
+        paves = []
 
-    def draw1D(self, plotsDir, texts, arbitraryUnit, maskObserved, drawEmpty):
+        if len(self.hdef.conditions):
+            condPave = makePaveText()
+            paves.append(condPave)
+            for c in self.hdef.conditions:
+                condPave.AddText(c)
+
+        if self.hdef.dimension == 1:
+            self.draw1D(plotsDir, title, paves, arbitraryUnit, maskObserved, drawEmpty)
+        else:
+            self.draw2D(plotsDir, title, paves, arbitraryUnit, maskObserved, drawEmpty)
+
+    def draw1D(self, plotsDir, title, paves, arbitraryUnit, maskObserved, drawEmpty):
         obsGroup = next(group for group in self.groups if group.category == Group.OBSERVED)
         bkgGroups = filter(lambda x: x.category == Group.BACKGROUND, self.groups)
         sigGroups = filter(lambda x: x.category == Group.SIGNAL, self.groups)
 
-        if abs(self.obsHistogram.GetSumOfWeights() / self.obsRawHistogram.GetSumOfWeights() - 1.) > 1.e-5:
+        if self.obsRawHistogram.GetSumOfWeights() != 0. and abs(self.obsHistogram.GetSumOfWeights() / self.obsRawHistogram.GetSumOfWeights() - 1.) > 1.e-5:
             # histogram is weighted
             obs = ROOT.TGraphAsymmErrors(self.obsHistogram)
         else:
@@ -173,7 +190,7 @@ class Stack(object):
 
             self.hdef.ytitle.replace(' (last bin: overflow events)', '')
 
-        stack = ROOT.THStack(self.name, self.hdef.title)
+        stack = ROOT.THStack(self.name, '')
 
         for group in bkgGroups:
             stack.Add(self.histograms[group])
@@ -181,32 +198,58 @@ class Stack(object):
         obs.SetName(self.name + '_obsGraph')
         obs.SetLineColor(ROOT.kBlack)
         obs.SetMarkerStyle(8)
-        obs.SetMarkerSize(0.6)
+        obs.SetMarkerSize(1.)
         obs.SetMarkerColor(ROOT.kBlack)
         obs.SetFillStyle(0)
 
-        canvas = ROOT.TCanvas(self.name, self.hdef.title)
+        canvas = ROOT.TCanvas(self.name, '')
 
-        distPad = ROOT.TPad('distPad', 'Distribution', 0., 0., 1., 1.)
+        if title:
+            titlePad = ROOT.TPad('titlePad', 'Title', 0., 0.9, 1., 1.)
+            titlePad.SetCanvas(canvas)
+            canvas.cd()
+            titlePad.Draw()
+            titlePad.cd()
+
+            titlePave = makePaveText()
+            titlePave.SetTextSize(0.4)
+            titlePave.SetX1NDC(0.15)
+            titlePave.SetX2NDC(0.95)
+            titlePave.SetY1NDC(0.)
+            titlePave.SetY2NDC(1.)
+            titlePave.SetTextAlign(22)
+            titlePave.AddText(title)
+            titlePave.Draw()
+
+            ypad = 0.9
+        else:
+            ypad = 1.
+
+        distPad = ROOT.TPad('distPad', 'Distribution', 0., 0., 1., ypad)
         distPad.SetCanvas(canvas)
         canvas.cd()
         distPad.Draw()
         distPad.cd()
 
-        distPad.SetLeftMargin(0.07)
-        distPad.SetRightMargin(0.07)
-        distPad.SetTopMargin(0.1)
-        distPad.SetBottomMargin(0.1)
+        distPad.SetLeftMargin(0.15)
+        distPad.SetRightMargin(0.05)
+        distPad.SetTopMargin(0.)
+        distPad.SetBottomMargin(0.15)
 
+        distPad.SetLogx(self.hdef.xlog)
         distPad.SetLogy(self.hdef.logscale)
 
-        legend = ROOT.TLegend(0., 0., 0., 0.89)
+        onRight = self.bkgHistogram.GetMean() < self.hdef.xedges[-1] / 2.
+
+        y = 0.99
+
+        legend = ROOT.TLegend()
+        legend.SetY2NDC(y)
         legend.SetFillStyle(4000)
         legend.SetBorderSize(0)
         legend.SetTextFont(62)
-        legend.SetTextSize(0.03)
+        legend.SetTextSize(0.035)
         legend.SetTextAlign(12)
-        legend.ConvertNDCtoPad()
 
         if self.obsHistogram and self.obsHistogram.GetSumOfWeights() > 0.:
             legend.AddEntry(obs, obsGroup.name, 'LP')
@@ -214,40 +257,64 @@ class Stack(object):
         for group in reversed(bkgGroups):
             legend.AddEntry(self.histograms[group], group.title, 'F')
 
+        if self.bkgHistogram.GetSumOfWeights() > 0.:
+            legend.AddEntry(self.bkgHistogram, 'Uncertainty', 'F')
+
         for group in sigGroups:
             legend.AddEntry(self.histograms[group], group.title, 'L')
 
-        y = 0.89 - legend.GetNRows() * 0.04
+        y -= legend.GetNRows() * 0.045
         legend.SetY1NDC(y)
-        for text in texts:
-            height = text.GetY2NDC() - text.GetY1NDC()
-            text.SetY2NDC(y)
-            y -= height
-            text.SetY1NDC(y)
+
+        y -= 0.03
+
+        for pave in paves:
+            pave.SetY2NDC(y)
+            y -= pave.GetSize() * 0.045
+            pave.SetY1NDC(y)
+
+        paves = [legend] + paves
+
+        if self.bkgHistogram.GetSumOfWeights() == 0.:
+            dFrame = self.obsHistogram.Clone('dFrame')
+            dFrame.Reset()
+            dFrame.SetMarkerSize(0)
+            dFrame.SetLineWidth(0)
+            dFrame.SetFillStyle(0)
+        else:
+            dFrame = stack
 
         if not self.hdef.vrange:
             if self.hdef.logscale:
-                stack.SetMinimum(self.bkgHistogram.GetMinimum(0.) * 0.2)
+                dFrame.SetMinimum(self.bkgHistogram.GetMinimum(0.) * 0.2)
             else:
-                stack.SetMinimum(0.)
+                dFrame.SetMinimum(0.)
     
             if distPad.GetLogy():
-                stack.SetMaximum(self.bkgHistogram.GetMaximum() * 10.)
+                dFrame.SetMaximum(self.bkgHistogram.GetMaximum() * 10.)
             else:
-                stack.SetMaximum(self.bkgHistogram.GetMaximum() * 1.3)
+                dFrame.SetMaximum(self.bkgHistogram.GetMaximum() * 1.3)
 
             if self.obsHistogram and (drawEmpty or self.obsHistogram.GetSumOfWeights() > 0.):
+                if self.bkgHistogram.GetMinimum(0.) > self.obsHistogram.GetMinimum(0.):
+                    if distPad.GetLogy():
+                        dFrame.SetMinimum(self.obsHistogram.GetMinimum(0.) * 0.2)
+
                 if self.bkgHistogram.GetMaximum() < self.obsHistogram.GetMaximum():
                     if distPad.GetLogy():
-                        stack.SetMaximum(self.obsHistogram.GetMaximum() * 10.)
+                        dFrame.SetMaximum(self.obsHistogram.GetMaximum() * 10.)
                     else:
-                        stack.SetMaximum(self.obsHistogram.GetMaximum() * 1.3)
+                        dFrame.SetMaximum(self.obsHistogram.GetMaximum() * 1.3)
 
         else:
-            stack.SetMinimum(self.hdef.vrange[0])
-            stack.SetMaximum(self.hdef.vrange[1])
+            if self.hdef.logscale:
+                factor = 2.
+            else:
+                factor = 1.
+            dFrame.SetMinimum(self.hdef.vrange[0] * factor)
+            dFrame.SetMaximum(self.hdef.vrange[1] / factor)
 
-        stack.Draw('HIST')
+        dFrame.Draw('HIST')
         self.bkgHistogram.Draw('E2 SAME')
         for group in sigGroups:
             self.histograms[group].Draw('HIST SAME')
@@ -257,16 +324,18 @@ class Stack(object):
 
         distPad.Update()
 
-        stack.GetXaxis().SetTitle(self.hdef.xtitle)
-        stack.GetYaxis().SetTitle(self.hdef.ytitle)
+        dFrame.SetTitle('')
+        dFrame.GetXaxis().SetTitle(self.hdef.xtitle)
+        dFrame.GetYaxis().SetTitle(self.hdef.ytitle)
+
+        dFrame.GetYaxis().SetLabelSize(0.05)
+        dFrame.GetYaxis().SetTitleSize(0.05)
 
         if arbitraryUnit:
-            stack.GetYaxis().SetTitleOffset(0.5)
-            stack.GetYaxis().SetLabelSize(0)
+            dFrame.GetYaxis().SetTitleOffset(0.5)
+            dFrame.GetYaxis().SetLabelSize(0)
         else:
-            stack.GetYaxis().SetTitleOffset(0.8)
-
-        onRight = self.bkgHistogram.GetMean() < self.hdef.xedges[-1] / 2.
+            dFrame.GetYaxis().SetTitleOffset(1.2)
 
         if self.obsHistogram and (drawEmpty or self.obsHistogram.GetSumOfWeights() > 0.):
             if maskObserved and self.hdef.maskedRegion:
@@ -290,28 +359,35 @@ class Stack(object):
                 textBackground = ROOT.TPave()
                 textBackground.SetBorderSize(0)
                 textBackground.SetOption('')
-                textBackground.SetY1NDC(texts[-1].GetY1NDC())
+                textBackground.SetY1NDC(paves[-1].GetY1NDC())
                 textBackground.SetY2NDC(legend.GetY2NDC())
                 textBackground.ConvertNDCtoPad()
                 textBackground.SetFillColor(ROOT.kWhite)
                 textBackground.SetFillStyle(1001)
                 drawPave(textBackground, onRight)
 
-        drawPave(legend, onRight)
-        for text in texts:
-            drawPave(text, onRight)
+        for pave in paves:
+            drawPave(pave, onRight)
 
-        if not self.obsHistogram or (not drawEmpty and self.obsHistogram.GetSumOfWeights() == 0.):
-            canvas.SaveAs(plotsDir + "/" + self.name + ".pdf")
+        if not self.obsHistogram or (not drawEmpty and self.obsHistogram.GetSumOfWeights() == 0.) or not stack.GetHists():
+            if title:
+                canvas.SetCanvasSize(580, 600)
+            else:
+                canvas.SetCanvasSize(640, 600)
+                
+            canvas.Update()
+            canvas.Print(plotsDir + "/" + self.name + ".pdf")
             return
 
-        stack.GetXaxis().SetLabelSize(0.)
-        stack.GetXaxis().SetTitleSize(0.)
+        if title:
+            canvas.SetCanvasSize(700, 800)
+        else:
+            canvas.SetCanvasSize(800, 800)
 
-        distPad.SetPad(0., 0.25, 1., 1.)
-        distPad.SetLeftMargin(0.07)
-        distPad.SetRightMargin(0.07)
-        distPad.SetTopMargin(0.1)
+        dFrame.GetXaxis().SetLabelSize(0.)
+        dFrame.GetXaxis().SetTitleSize(0.)
+
+        distPad.SetPad(0., 0.25, 1., ypad)
         distPad.SetBottomMargin(0.)
 
         ratioPad = ROOT.TPad('ratioPad', 'Ratio', 0., 0., 1., 0.25)
@@ -320,10 +396,10 @@ class Stack(object):
         ratioPad.Draw()
 
         ratioPad.SetGridy(2)
-        ratioPad.SetLeftMargin(0.07)
-        ratioPad.SetRightMargin(0.07)
-        ratioPad.SetTopMargin(0.04)
-        ratioPad.SetBottomMargin(0.25)
+        ratioPad.SetLeftMargin(0.15)
+        ratioPad.SetRightMargin(0.05)
+        ratioPad.SetTopMargin(0.05)
+        ratioPad.SetBottomMargin(0.4)
 
         ratioPad.cd()
 
@@ -348,9 +424,9 @@ class Stack(object):
             gObs.Draw('APZ')
             gObs.GetYaxis().SetTitle('(obs - bkg) / #delta_{bkg}')
 
-            hFrame = gObs.GetHistogram()
-            hFrame.SetMinimum(-3.)
-            hFrame.SetMaximum(3.)
+            rFrame = gObs.GetHistogram()
+            rFrame.SetMinimum(-3.)
+            rFrame.SetMaximum(3.)
 
             line = ROOT.TLine(self.obsHistogram.GetXaxis().GetXmin(), 0., self.obsHistogram.GetXaxis().GetXmax(), 0.)
 
@@ -365,9 +441,9 @@ class Stack(object):
             hUncert.Draw('E2')
             hUncert.GetYaxis().SetTitle('obs / bkg')
 
-            hFrame = hUncert
-            hFrame.SetMinimum(0.)
-            hFrame.SetMaximum(2.)
+            rFrame = hUncert
+            rFrame.SetMinimum(0.)
+            rFrame.SetMaximum(2.)
 
             gObs = obs.Clone(self.name + '_ratio')
 
@@ -386,22 +462,24 @@ class Stack(object):
             line = ROOT.TLine(hUncert.GetXaxis().GetXmin(), 1., hUncert.GetXaxis().GetXmax(), 1.)
 
         for iP in range(gObs.GetN()):
-            if gObs.GetY()[iP] > hFrame.GetMaximum():
-                arrow.DrawArrow(gObs.GetX()[iP], line.GetY1(), gObs.GetX()[iP], hFrame.GetMaximum() * 0.95)
+            if gObs.GetY()[iP] > rFrame.GetMaximum():
+                arrow.DrawArrow(gObs.GetX()[iP], line.GetY1(), gObs.GetX()[iP], rFrame.GetMaximum() * 0.95)
 
         line.Draw()
 
-        hFrame.SetTitle("")
-        hFrame.GetXaxis().SetLabelSize(0.1)
-        hFrame.GetXaxis().SetTitleSize(0.1)
-        hFrame.GetYaxis().SetTitleOffset(0.2)
-        hFrame.GetYaxis().SetLabelSize(0.1)
-        hFrame.GetYaxis().SetTitleSize(0.1)
-        hFrame.GetYaxis().SetNdivisions(110)
+        rFrame.SetTitle("")
+        rFrame.GetXaxis().SetLabelSize(0.12)
+        rFrame.GetXaxis().SetTitleSize(0.12)
+        rFrame.GetYaxis().SetTitleOffset(0.4)
+        rFrame.GetYaxis().SetLabelSize(0.12)
+        rFrame.GetYaxis().SetTitleSize(0.12)
+        rFrame.GetYaxis().SetTitleOffset(1.)
+        rFrame.GetYaxis().SetNdivisions(5)
 
-        canvas.SaveAs(plotsDir + "/" + self.name + ".pdf")
+        canvas.Update()
+        canvas.Print(plotsDir + "/" + self.name + ".pdf")
 
-    def draw2D(self, plotsDir, texts, arbitraryUnit, maskObserved, drawEmpty):
+    def draw2D(self, plotsDir, title, paves, arbitraryUnit, maskObserved, drawEmpty):
         obsGroup = next(group for group in self.groups if group.category == Group.OBSERVED)
 
         drawOption = self.hdef.drawOption.upper()
@@ -414,42 +492,48 @@ class Stack(object):
         canvas.SetTopMargin(0.1)
         canvas.SetBottomMargin(0.1)
 
+        canvas.SetLogx(self.hdef.xlog)
         canvas.SetLogz(self.hdef.logscale)
 
-        y = 0.9
-        for text in texts:
-            height = text.GetY2NDC() - text.GetY1NDC()
-            text.SetY2NDC(y)
-            y -= height
-            text.SetY1NDC(y)
-
         sigGroups = filter(lambda x: x.category == Group.SIGNAL, self.groups)
+
+        drawObs = self.obsHistogram and (drawEmpty or self.obsHistogram.GetSumOfWeights() > 0.)
 
         if 'BOX' in drawOption and 'TEXT' in drawOption:
             drawOption = drawOption.replace('TEXT', '')
 
-            self.bkgHistogram.Draw(drawOption)
-            for text in texts:
-                drawPave(text, True)
+            self.bkgHistogram.SetFillStyle(0)
+            self.bkgHistogram.SetLineColor(ROOT.kBlue)
 
-            legend = ROOT.TLegend(0.7, 0.1, 0.9, 0.3)
+            self.bkgHistogram.Draw(drawOption)
+            if drawObs: self.obsHistogram.Draw(drawOption + ' SAME')
+
+            y = 0.99
+
+            legend = ROOT.TLegend(0., 0., 0., y)
             legend.SetFillStyle(1001)
             legend.SetFillColor(ROOT.kWhite)
             legend.SetBorderSize(0)
             legend.SetTextFont(62)
-            legend.SetTextSize(0.03)
+            legend.SetTextSize(0.035)
             legend.SetTextAlign(12)
-            legend.ConvertNDCtoPad()            
-    
-            self.bkgHistogram.SetFillStyle(0)
-            self.bkgHistogram.SetLineColor(ROOT.kBlue)
-            legend.AddEntry(self.bkgHistogram, 'Estimated', 'L')
+            legend.ConvertNDCtoPad()
 
-            if self.obsHistogram and (drawEmpty or self.obsHistogram.GetSumOfWeights() > 0.):
-                self.obsHistogram.Draw(drawOption + ' SAME')
-                legend.AddEntry(self.obsHistogram, obsGroup.name, 'L')
-    
-            legend.Draw()
+            legend.AddEntry(self.bkgHistogram, 'Estimated', 'L')
+            if drawObs: legend.AddEntry(self.obsHistogram, obsGroup.name, 'L')
+
+            y -= legend.GetNRows() * 0.045
+            legend.SetY1NDC(y)
+
+            for pave in paves:
+                pave.SetY2NDC(y)
+                y -= pave.GetSize() * 0.045
+                pave.SetY1NDC(y)
+
+            paves = [legend] + paves
+
+            for pave in paves:
+                drawPave(pave, True)
 
             text = ROOT.TLatex()
             text.SetTextSize(0.02 * self.bkgHistogram.GetMarkerSize())
@@ -465,27 +549,27 @@ class Stack(object):
                     if self.obsHistogram and (drawEmpty or self.obsHistogram.GetSumOfWeights() > 0.):
                         text.DrawLatex(x, y + offset * 2., '%.1f#pm%.1f' % (self.obsHistogram.GetBinContent(bin), self.obsHistogram.GetBinError(bin))).SetTextColor(ROOT.kBlack)
                     
-            canvas.SaveAs(plotsDir + "/" + self.name + ".pdf")
+            canvas.Print(plotsDir + "/" + self.name + ".pdf")
     
         else:
             self.bkgHistogram.Draw(drawOption)
 
             if arbitraryUnit: self.bkgHistogram.GetZaxis().SetLabelSize(0)
             
-            for text in texts:
-                drawPave(text, True)
+            for pave in paves:
+                drawPave(pave, True)
 
-            canvas.SaveAs(plotsDir + '/' + self.bkgHistogram.GetName() + '.pdf')
+            canvas.Print(plotsDir + '/' + self.bkgHistogram.GetName() + '.pdf')
 
-            if self.obsHistogram and (drawEmpty or self.obsHistogram.GetSumOfWeights() > 0.):
+            if drawObs:
                 self.obsHistogram.Draw(drawOption)
 
                 if arbitraryUnit: self.obsHistogram.GetZaxis().SetLabelSize(0)
             
-                for text in texts:
-                    drawPave(text, True)
+                for pave in paves:
+                    drawPave(pave, True)
 
-                canvas.SaveAs(plotsDir + '/' + self.obsHistogram.GetName() + '.pdf')
+                canvas.Print(plotsDir + '/' + self.obsHistogram.GetName() + '.pdf')
 
         for group in sigGroups:
             histo = self.histograms[group]
@@ -494,10 +578,10 @@ class Stack(object):
 
             if arbitraryUnit: histo.GetZaxis().SetLabelSize(0)
             
-            for text in texts:
-                drawPave(text, True)
+            for pave in paves:
+                drawPave(pave, True)
 
-            canvas.SaveAs(plotsDir + "/" + histo.GetName() + ".pdf")
+            canvas.Print(plotsDir + "/" + histo.GetName() + ".pdf")
 
 
 class StackConfig(object):

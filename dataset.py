@@ -6,7 +6,7 @@ class Dataset(object):
 
     class Sample(object):
 
-        COUNTER = HDef('Counter', 'Counter', (3, 0., 3.), xlabels = ['Rate', 'ScaleUncert', 'Entries'])
+        COUNTER = HDef('Counter', (3, 0., 3.), xlabels = ['Rate', 'ScaleUncert', 'Entries'])
         
         def __init__(self, dataset, eventClass):
             self.name = dataset.name + '_' + eventClass

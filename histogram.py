@@ -78,15 +78,14 @@ class Histogram:
 
 
 class HDef(object):
-    def __init__(self, name, title, binning, xtitle = '', xlabels = [], ytitle = '', ylabels = [], overflowable = False, mask = None, logscale = False, vrange = None, drawOption = ''):
+    def __init__(self, name, binning, xtitle = '', xlabels = [], ytitle = '', ylabels = [], cond = [], overflowable = False, mask = None, logscale = False, xlog = False, vrange = None, drawOption = ''):
         self.name = name
-        self.title = title
-        
+
         if len(binning) == 1 or type(binning) == list:
             if type(binning) == tuple:
                 self.xedges = list(binning[0])
             else:
-                self.xedges = binning
+                self.xedges = list(binning)
             self.dimension = 1
             
         elif len(binning) == 3:
@@ -96,8 +95,8 @@ class HDef(object):
             self.dimension = 1
             
         elif len(binning) == 2:
-            self.xedges = binning[0]
-            self.yedges = binning[1]
+            self.xedges = list(binning[0])
+            self.yedges = list(binning[1])
             self.dimension = 2
             
         elif len(binning) == 6:
@@ -111,7 +110,7 @@ class HDef(object):
         self.overflowable = overflowable
 
         if type(xtitle) == tuple:
-            self.xtitle = xtitle[0] + '(' + xtitle[1] + ')'
+            self.xtitle = xtitle[0] + ' (' + xtitle[1] + ')'
             self.xunit = xtitle[1]
         else:
             self.xtitle = xtitle
@@ -119,12 +118,15 @@ class HDef(object):
 
         if self.dimension == 1:
             self.ytitle = 'events'
-            if self.xunit: self.ytitle += ' / ' + self.xunit
+            if self.xunit == 'NoUnit': pass
+            elif self.xunit: self.ytitle += ' / ' + self.xunit
             else: self.ytitle += ' / unit'
+
             if self.overflowable: self.ytitle += ' (last bin: overflow events)'
+            self.yunit = ''
         else:
             if type(ytitle) == tuple:
-                self.ytitle = ytitle[0] + '(' + ytitle[1] + ')'
+                self.ytitle = ytitle[0] + ' (' + ytitle[1] + ')'
                 self.yunit = ytitle[1]
             else:
                 self.ytitle = ytitle
@@ -143,9 +145,15 @@ class HDef(object):
             else:
                 self.ny = 1
 
+        if type(cond) == list or type(cond) == tuple:
+            self.conditions = list(cond)
+        elif type(cond) == str:
+            self.conditions = [cond]
+
         self.maskedRegion = mask
 
         self.logscale = logscale
+        self.xlog = xlog
 
         self.vrange = vrange
 
@@ -153,6 +161,32 @@ class HDef(object):
 
         self.xlabels = xlabels
         self.ylabels = ylabels
+
+    def clone(self):
+        if self.dimension == 1:
+            clone = HDef(self.name, self.xedges)
+            clone.dimension = 1
+        else:
+            clone = HDef(self.name, (self.xedges, self.yedges))
+            clone.dimension = 2
+
+        clone.conditions = list(self.conditions)
+        clone.overflowable = self.overflowable
+        clone.xtitle = self.xtitle
+        clone.xunit = self.xunit
+        clone.ytitle = self.ytitle
+        clone.yunit = self.yunit
+        clone.nx = self.nx
+        clone.ny = self.ny
+        clone.maskedRegion = self.maskedRegion
+        clone.logscale = self.logscale
+        clone.xlog = self.xlog
+        clone.vrange = self.vrange
+        clone.drawOption = self.drawOption
+        clone.xlabels = self.xlabels
+        clone.ylabels = self.ylabels
+
+        return clone
 
     def generate(self, suffix = ''):
         if suffix:
@@ -166,7 +200,7 @@ class HDef(object):
             xedges = array.array('d', self.xedges)
 
         if self.dimension == 1:
-            h = ROOT.TH1D(name, self.title, len(xedges) - 1, xedges)
+            h = ROOT.TH1D(name, '', len(xedges) - 1, xedges)
 
         else:
             if self.overflowable:
@@ -174,7 +208,7 @@ class HDef(object):
             else:
                 yedges = array.array('d', self.yedges)
 
-            h = ROOT.TH2D(name, self.title, len(xedges) - 1, xedges, len(yedges) - 1, yedges)
+            h = ROOT.TH2D(name, '', len(xedges) - 1, xedges, len(yedges) - 1, yedges)
         
         h.GetXaxis().SetTitle(self.xtitle)
         h.GetYaxis().SetTitle(self.ytitle)
@@ -193,11 +227,14 @@ class HDef(object):
                     iY += 1
             
             title = 'events'
-            if self.xunit and self.yunit:
-                if self.xunit == self.yunit: unit = self.xunit + '^2'
-                else: unit = self.xunit + '#cdot' + self.yunit
-            elif self.xunit:
-                unit = self.xunit
+            xunit = self.xunit
+            if xunit == 'NoUnit': xunit = ''
+
+            if xunit and self.yunit:
+                if xunit == self.yunit: unit = xunit + '^2'
+                else: unit = xunit + '#cdot' + self.yunit
+            elif xunit:
+                unit = xunit
             elif self.yunit:
                 unit = self.yunit
             else:

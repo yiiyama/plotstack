@@ -142,30 +142,10 @@ def makeStack(config, source, plotsDir):
         if key.GetName().startswith('L = '):
             integratedLumi = float(key.GetName().split()[2])
 
-    paves = []
-    cmsPave = ROOT.TPaveText()
-    cmsPave.SetY2NDC(0.045)
-    cmsPave.SetTextFont(62)
-    cmsPave.SetTextSize(0.03)
-    cmsPave.SetTextAlign(12)
-    cmsPave.SetBorderSize(0)
-    cmsPave.SetFillStyle(0)
-    paves.append(cmsPave)
     if integratedLumi > 0.: 
-        cmsPave.AddText('CMS Preliminary 2014')
-        lumiPave = ROOT.TPaveText()
-        lumiPave.SetY2NDC(0.045)
-        lumiPave.SetTextFont(62)
-        lumiPave.SetTextSize(0.03)
-        lumiPave.SetTextAlign(12)
-        lumiPave.SetBorderSize(0)
-        lumiPave.SetFillStyle(0)
-        lumiPave.AddText('L = %.1f fb^{-1}' % (integratedLumi / 1000.))
-        paves.append(lumiPave)
-        arbitraryUnit = False
+        title = 'CMS Preliminary 2014  L = %.1f fb^{-1}' % (integratedLumi / 1000.)
     else:
-        cmsPave.AddText('CMS Simulation 2014')
-        arbitraryUnit = True
+        title = 'CMS Simulation 2014'
 
     for group in config.groups:
         group.loadHistograms(config.hdefs, source.GetDirectory('groups'))
@@ -177,8 +157,8 @@ def makeStack(config, source, plotsDir):
             stack.addGroup(group)
 
         print stack.name
-        stack.draw(plotsDir, texts = paves, arbitraryUnit = arbitraryUnit, maskObserved = plotflags.HIDESENSITIVE, drawEmpty = plotflags.DRAWEMPTY)
-    
+        stack.draw(plotsDir, title = title, arbitraryUnit = integratedLumi <= 0., maskObserved = plotflags.HIDESENSITIVE, drawEmpty = plotflags.DRAWEMPTY)
+
 
 if __name__ == '__main__':
 
@@ -260,10 +240,13 @@ if __name__ == '__main__':
         outputFile = ROOT.TFile.Open(locations.plotsOutputDir + '/' + stackName + '.root', 'recreate')
         copyDir(source.GetDirectory('components'), outputFile.mkdir('components'))
 
+        if options.onlyStack:
+            copyDir(source.GetDirectory('groups'), outputFile.mkdir('groups'))
+        else:
+            options.formGroup = True
+
         outputFile.Close()
 
-        options.formGroup = True
-        
     try:
         os.makedirs(locations.plotsDir + '/' + stackName)
     except OSError:
