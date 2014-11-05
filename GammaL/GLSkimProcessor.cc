@@ -13,6 +13,7 @@
 #include "TChainElement.h"
 #include "TString.h"
 #include "TObjArray.h"
+#include "TPRegexp.h"
 
 #include <cmath>
 #include <iostream>
@@ -21,6 +22,8 @@
 #include <stdexcept>
 
 #include "../ROOT/EventProcessor.h"
+
+bool const ALTFAKE(false);
 
 enum OutputTypes {
   oPhotonAndElectron,
@@ -192,6 +195,8 @@ private:
 
   /* UTIL */
 
+  double maxDR;
+
   bool photon_muonIso[susy::NMAX];
   bool photon_electronIso[susy::NMAX];
   bool photon_matchGen[susy::NMAX];
@@ -245,7 +250,8 @@ GLSkimProcessor::GLSkimProcessor(Dataset const* _dataset, char const* _outputDir
   muonsOut(),
   jetsOut(),
   cutflowE_(0),
-  cutflowM_(0)
+  cutflowM_(0),
+  maxDR(0.8)
 {
   std::fill_n(electron_isCand, susy::NMAX, false);
   std::fill_n(electron_isFake, susy::NMAX, false);
@@ -288,6 +294,8 @@ GLSkimProcessor::GLSkimProcessor(Dataset const* _dataset, char const* _outputDir
 void
 GLSkimProcessor::process()
 {
+  std::cout << "Processing " << dataset.name << std::endl;
+
   useElectronFilter =
     produceOutput[oPhotonAndElectron] ||
     produceOutput[oElePhotonAndElectron] ||
@@ -313,18 +321,21 @@ GLSkimProcessor::process()
   TChain filterTree("eventVars");
   TChain eventTree("eventVars");
   TChain objectTree("allObjects");
-  TChain cutTree("cutTree");
 
   for(unsigned iP(0); iP != inputPaths.size(); ++iP){
     filterTree.Add(inputPaths[iP]);
     eventTree.Add(inputPaths[iP]);
     objectTree.Add(inputPaths[iP]);
-    cutTree.Add(inputPaths[iP]);
   }
 
   if(filterTree.GetEntries() == 0){
     std::cerr << "Empty input" << std::endl;
     return;
+  }
+
+  if(entrylist){
+    std::cout << entrylist->GetN() << " entries" << std::endl;
+    filterTree.SetEntryList(entrylist);
   }
 
   filterTree.SetBranchStatus("*", 0);
@@ -468,35 +479,97 @@ GLSkimProcessor::process()
   /////////////////
 
   if(produceOutput[oPhotonAndElectron] || produceOutput[oPhotonAndMuon]){
-    TString cuts[] = {
-      "AllEvents",
-      "HLT",
+    TChain cutTree("cutTree");
+    for(unsigned iP(0); iP != inputPaths.size(); ++iP)
+      cutTree.Add(inputPaths[iP]);
+
+    enum Flag {
+      kGoodLumi,
+      kHLTE,
+      kHLTM,
+      kMetFilter,
+      kGoodVertex,
+      kGoodPhotonE,
+      kGoodPhotonM,
+      kGoodElectron,
+      kGoodMuon,
+      nFlags
+    };
+    TString flagNames[] = {
       "GoodLumi",
+      "HLTE",
+      "HLTM",
       "MetFilter",
       "GoodVertex",
-      "RadiationVeto",
+      "GoodPhotonE",
+      "GoodPhotonM",
+      "GoodElectron",
+      "GoodMuon"
+    };
+    unsigned const nCounterBins(1 << nFlags);
+
+    TString countExpr;
+    for(unsigned iC(0); iC != nFlags; ++iC){
+      countExpr += TString::Format("%d * ", iC + 1);
+      countExpr += flagNames[iC];
+      if(iC != nFlags - 1) countExpr += " + ";
+    }
+    
+    cutTree.Draw(countExpr + TString::Format(">>counter(%d,0,%d)", nCounterBins, nCounterBins), "", "goff");
+    TH1* counter(static_cast<TH1*>(gDirectory->Get("counter")));
+
+    TString signalCuts[] = {
+      "AllEvents",
+      "GoodLumi",
+      "HLT",
+      "MetFilter",
+      "GoodVertex",
       "GoodPhoton",
       "GoodLepton",
       "FSRVeto"
     };
-    unsigned nCuts(sizeof(cuts) / sizeof(TString));
+    unsigned const nSignalCuts(sizeof(signalCuts) / sizeof(TString));
 
     if(produceOutput[oPhotonAndElectron]){
       eventList[oPhotonAndElectron]->GetCurrentFile()->cd();
-      cutflowE_ = new TH1D("cutflowE", "Cutflow (Electron Channel)", nCuts, 0., nCuts);
-      for(unsigned iC(0); iC != nCuts; ++iC){
-        cutflowE_->GetXaxis()->SetBinLabel(iC + 1, cuts[iC]);
-        if(iC != nCuts - 1) cutflowE_->SetBinContent(iC + 1, cutTree.GetEntries(TString::Format("cutflowE >= %d", iC)));
+      cutflowE_ = new TH1D("cutflowE", "Cutflow (Electron Channel)", nSignalCuts, 0., nSignalCuts);
+      for(unsigned iC(0); iC != nSignalCuts; ++iC)
+        cutflowE_->GetXaxis()->SetBinLabel(iC + 1, signalCuts[iC]);
+
+      unsigned iFlags[nSignalCuts] = {nFlags, kGoodLumi, kHLTE, kMetFilter, kGoodVertex, kGoodPhotonE, kGoodElectron, nFlags};
+      double entries[nSignalCuts];
+      std::fill_n(entries, nSignalCuts, 0);
+      for(unsigned iX(1); iX <= nCounterBins; ++iX){
+        double cont(counter->GetBinContent(iX));
+        for(unsigned iS(0); iS != nSignalCuts; ++iS)
+          if(((iX >> iFlags[iS]) & 1) == 1) entries[iS] += cont;
       }
+
+      cutflowE_->SetBinContent(1, counter->GetEntries());
+      for(unsigned iS(1); iS != nSignalCuts - 1; ++iS)
+        cutflowE_->SetBinContent(iS + 1, entries[iS]);
     }
     if(produceOutput[oPhotonAndMuon]){
       eventList[oPhotonAndMuon]->GetCurrentFile()->cd();
-      cutflowM_ = new TH1D("cutflowM", "Cutflow (Muon Channel)", nCuts, 0., nCuts);
-      for(unsigned iC(0); iC != nCuts; ++iC){
-        cutflowM_->GetXaxis()->SetBinLabel(iC + 1, cuts[iC]);
-        if(iC != nCuts - 1) cutflowM_->SetBinContent(iC + 1, cutTree.GetEntries(TString::Format("cutflowM >= %d", iC)));
+      cutflowM_ = new TH1D("cutflowM", "Cutflow (Muon Channel)", nSignalCuts, 0., nSignalCuts);
+      for(unsigned iC(0); iC != nSignalCuts; ++iC)
+        cutflowM_->GetXaxis()->SetBinLabel(iC + 1, signalCuts[iC]);
+
+      unsigned iFlags[nSignalCuts] = {nFlags, kGoodLumi, kHLTM, kMetFilter, kGoodVertex, kGoodPhotonM, kGoodMuon};
+      double entries[nSignalCuts];
+      std::fill_n(entries, nSignalCuts, 0);
+      for(unsigned iX(1); iX <= nCounterBins; ++iX){
+        double cont(counter->GetBinContent(iX));
+        for(unsigned iS(0); iS != nSignalCuts; ++iS)
+          if(((iX >> iFlags[iS]) & 1) == 1) entries[iS] += cont;
       }
+
+      cutflowM_->SetBinContent(1, counter->GetEntries());
+      for(unsigned iS(1); iS != nSignalCuts - 1; ++iS)
+        cutflowM_->SetBinContent(iS + 1, entries[iS]);
     }
+
+    delete counter;
   }
 
   ////////////////////////////////
@@ -505,25 +578,36 @@ GLSkimProcessor::process()
 
   if(produceOutput[oPhotonAndElectron] || produceOutput[oPhotonAndMuon] || produceOutput[oPhotonAndDimuon]){
 
+    TFile* simIdSFSource(0);
+    if(dataset.dataType == Dataset::kFastSim){
+      simIdSFSource = TFile::Open("/afs/cern.ch/user/y/yiiyama/output/GammaL/main/idEfficiencies/full_to_fast.root");
+      if(!simIdSFSource)
+        throw std::runtime_error("ID Full/FastSim SF source not available");
+    }
+
     if(dataset.dataType != Dataset::kRealData){
-      TFile* idSFSource(TFile::Open("/afs/cern.ch/user/y/yiiyama/output/GammaL/main/idEfficiency/scalefactors.root"));
+      TFile* idSFSource(TFile::Open("/afs/cern.ch/user/y/yiiyama/output/GammaL/main/idEfficiencies/scalefactors.root"));
       if(!idSFSource)
         throw std::runtime_error("ID SF source not available");
 
       idsfTable[0] = static_cast<TH1*>(idSFSource->Get("photon"));
       idsfTable[0]->SetDirectory(0);
+      if(simIdSFSource) idsfTable[0]->Multiply(static_cast<TH1*>(simIdSFSource->Get("photon_sf")));
       if(useElectronFilter){
         idsfTable[1] = static_cast<TH1*>(idSFSource->Get("electron"));
         idsfTable[1]->SetDirectory(0);
+        if(simIdSFSource) idsfTable[1]->Multiply(static_cast<TH1*>(simIdSFSource->Get("electron_sf")));
       }
       if(useMuonFilter){
         idsfTable[2] = static_cast<TH1*>(idSFSource->Get("muon"));
         idsfTable[2]->SetDirectory(0);
+        if(simIdSFSource) idsfTable[2]->Multiply(static_cast<TH1*>(simIdSFSource->Get("muon_sf")));
       }
 
       delete idSFSource;
+      delete simIdSFSource;
 
-      TFile* hltSFSource(TFile::Open("/afs/cern.ch/user/y/yiiyama/output/GammaL/main/hltEfficiency/scalefactors.root"));
+      TFile* hltSFSource(TFile::Open("/afs/cern.ch/user/y/yiiyama/output/GammaL/main/hltEfficiencies/scalefactors.root"));
       if(!hltSFSource)
         throw std::runtime_error("HLT SF source not available");
 
@@ -545,15 +629,21 @@ GLSkimProcessor::process()
 
       delete hltSFSource;
 
-      TString effSourceName;
-      if(dataset.name.Contains("WG") || dataset.name.Contains("WW") || dataset.name.Contains("WJets") || dataset.name.Contains("TChiwg")) effSourceName = "WGToLNuG";
-      else if(dataset.name.Contains("ZG") || dataset.name.Contains("DY") || dataset.name.Contains("WZ")) effSourceName = "ZGToLLG";
-      else if(dataset.name.Contains("TT") || dataset.name.Contains("ttA") || dataset.name.Contains("T5wg") || dataset.name.Contains("Spectra_gW")) effSourceName = "TTGJets";
-      else throw std::logic_error(("Efficiency table missing for " + dataset.name).Data());
+      TString inputName;
+      if(dataset.name.Contains("TChiwg") || dataset.name.Contains("T5wg") || dataset.name.Contains("Spectra_gW")){
+        TPRegexp pat("$([^_]+(?:|[a-zA-Z]+))_([0-9]+(?:|_[0-9]+))");
+        TObjArray* matches(pat.MatchS(dataset.name));
+        if(matches->GetEntries() == 0)
+          throw std::runtime_error(("Invalid signal dataset name " + dataset.name).Data());
 
-      std::cout << "Using efficiency source " << effSourceName << std::endl;
+        inputName = matches->At(1)->GetName();
+        inputName += "/";
+        inputName += matches->At(2)->GetName();
+      }
+      else
+        inputName = dataset.name;
 
-      TFile* idEffSource(TFile::Open("/afs/cern.ch/user/y/yiiyama/output/GammaL/main/idEfficiency/" + effSourceName + ".root"));
+      TFile* idEffSource(TFile::Open("/afs/cern.ch/user/y/yiiyama/output/GammaL/main/idEfficiencies/" + inputName + ".root"));
       if(!idEffSource)
         throw std::runtime_error("ID Eff source not available");
 
@@ -570,7 +660,7 @@ GLSkimProcessor::process()
 
       delete idEffSource;
 
-      TFile* hltEffSource(TFile::Open("/afs/cern.ch/user/y/yiiyama/output/GammaL/main/hltEfficiency/" + effSourceName + ".root"));
+      TFile* hltEffSource(TFile::Open("/afs/cern.ch/user/y/yiiyama/output/GammaL/main/hltEfficiencies/" + inputName + ".root"));
       if(!hltEffSource)
         throw std::runtime_error("HLT Eff source not available");
 
@@ -594,15 +684,17 @@ GLSkimProcessor::process()
   ////////////////////
   //// START LOOP ////
   ////////////////////
-
-  std::cout << "Processing " << dataset.name << std::endl;
-
-  long iEntry(0);
+  
+  long nRows(filterTree.GetEntries());
+  long iRow(0);
   long nIncrements(0);
-  while(filterTree.GetEntry(iEntry) > 0){
+  long iEntry;
+  while((iEntry = filterTree.GetEntryNumber(iRow)) >= 0 && iRow < nRows){
     try{
-      if(nIncrements++ % 1000 == 0) (std::cout << "\r" << iEntry).flush();
-      iEntry += dataset.prescale;
+      filterTree.GetEntry(iEntry);
+      if(nIncrements++ % 1000 == 0) (std::cout << "\r" << iRow).flush();
+
+      iRow += dataset.prescale;
 
       if(!(elHLT && ((PhotonAndElectron && produceOutput[oPhotonAndElectron]) ||
                      (ElePhotonAndElectron && produceOutput[oElePhotonAndElectron]) ||
@@ -619,8 +711,8 @@ GLSkimProcessor::process()
                      (FakePhotonAndFakeMuon && produceOutput[oFakePhotonAndFakeMuon])))) continue;
 
 
-      eventTree.GetEntry(iEntry - dataset.prescale);
-      objectTree.GetEntry(iEntry - dataset.prescale);
+      eventTree.GetEntry(iEntry);
+      objectTree.GetEntry(iEntry);
 
       if(!preprocess()) continue;
 
@@ -844,7 +936,6 @@ GLSkimProcessor::processPhotonAndLepton(unsigned _outputType)
     photonsOut.push_back(photons.at(iP));
   }
 
-  // uncomment when switching to liso trees
   if(photonsOut.size == 0) return;
 
   if(_outputType == oPhotonAndElectron){
@@ -890,26 +981,19 @@ GLSkimProcessor::processPhotonAndLepton(unsigned _outputType)
     if(muonsOut.size == 0) return;
   }
 
-  // comment when switching to liso trees
-
-  //  if(photonsOut.size == 0) return;
-
-  // if(_outputType == oPhotonAndElectron && cutflowE_) cutflowE_->Fill(cutflowE_->GetNbinsX() - 2.);
-  // if(_outputType == oPhotonAndMuon && cutflowM_) cutflowM_->Fill(cutflowM_->GetNbinsX() - 2.);
-
   scaleRelErr2 += photonRelErr * photonRelErr + electronRelErr * electronRelErr + muonRelErr * muonRelErr;
   scaleErr = effScale * std::sqrt(scaleRelErr2);
 
   susy::PhotonVars photon(photonsOut.at(0));
 
   if(_outputType == oPhotonAndElectron){
-    if(susy::deltaR(photonsOut.eta[0], photonsOut.phi[0], electronsOut.eta[0], electronsOut.phi[0]) < 0.8) return;
+    if(susy::deltaR(photonsOut.eta[0], photonsOut.phi[0], electronsOut.eta[0], electronsOut.phi[0]) < maxDR) return;
     calculateKinematics(photon, electronsOut);
 
     if(cutflowE_) cutflowE_->Fill(cutflowE_->GetNbinsX() - 0.5);
   }
   else if(_outputType == oPhotonAndMuon){
-    if(susy::deltaR(photonsOut.eta[0], photonsOut.phi[0], muonsOut.eta[0], muonsOut.phi[0]) < 0.8) return;
+    if(susy::deltaR(photonsOut.eta[0], photonsOut.phi[0], muonsOut.eta[0], muonsOut.phi[0]) < maxDR) return;
     calculateKinematics(photon, muonsOut);
 
     if(cutflowM_) cutflowM_->Fill(cutflowM_->GetNbinsX() - 0.5);
@@ -985,11 +1069,11 @@ GLSkimProcessor::processElePhotonAndLepton(unsigned _outputType)
     }
 
     if(_outputType == oElePhotonAndElectron){
-      if(susy::deltaR(elePhoton.eta, elePhoton.phi, electronsOut.eta[0], electronsOut.phi[0]) < 0.8) continue;
+      if(susy::deltaR(elePhoton.eta, elePhoton.phi, electronsOut.eta[0], electronsOut.phi[0]) < maxDR) continue;
       calculateKinematics(elePhoton, electronsOut);
     }
     else if(_outputType == oElePhotonAndMuon){
-      if(susy::deltaR(elePhoton.eta, elePhoton.phi, muonsOut.eta[0], muonsOut.phi[0]) < 0.8) continue;
+      if(susy::deltaR(elePhoton.eta, elePhoton.phi, muonsOut.eta[0], muonsOut.phi[0]) < maxDR) continue;
       calculateKinematics(elePhoton, muonsOut);
     }
 
@@ -1055,17 +1139,19 @@ GLSkimProcessor::processFakePhotonAndLepton(unsigned _outputType)
     else{
       if(!photon_matchMHLT[iFP]) continue;
     }
-    if(photons.hOverE[iFP] > 0.05 || photons.sigmaIetaIeta[iFP] > 0.014) continue;
-    if(_outputType == oFakePhotonAndMuon && (photons.chargedHadronIso[iFP] > 15. || photons.neutralHadronIso[iFP] > 3.5 || photons.photonIso[iFP] > 1.3)) continue;
+    if(!ALTFAKE){
+      if(photons.hOverE[iFP] > 0.05 || photons.sigmaIetaIeta[iFP] > 0.014) continue;
+      if(_outputType == oFakePhotonAndMuon && (photons.chargedHadronIso[iFP] > 15. || photons.neutralHadronIso[iFP] > 3.5 || photons.photonIso[iFP] > 1.3)) continue;
+    }
 
     susy::PhotonVars fakePhoton(photons.at(iFP));
 
     if(_outputType == oFakePhotonAndElectron){
-      if(susy::deltaR(fakePhoton.eta, fakePhoton.phi, electronsOut.eta[0], electronsOut.phi[0]) < 0.8) continue;
+      if(susy::deltaR(fakePhoton.eta, fakePhoton.phi, electronsOut.eta[0], electronsOut.phi[0]) < maxDR) continue;
       calculateKinematics(fakePhoton, electronsOut);
     }
     else if(_outputType == oFakePhotonAndMuon){
-      if(susy::deltaR(fakePhoton.eta, fakePhoton.phi, muonsOut.eta[0], muonsOut.phi[0]) < 0.8) continue;
+      if(susy::deltaR(fakePhoton.eta, fakePhoton.phi, muonsOut.eta[0], muonsOut.phi[0]) < maxDR) continue;
       calculateKinematics(fakePhoton, muonsOut);
     }
 
@@ -1146,11 +1232,13 @@ GLSkimProcessor::processPhotonAndFakeLepton(unsigned _outputType)
 
       susy::ElectronVars fakeElectron(electrons.at(iFL));
 
-      susy::ObjectSelector::isGoodElectron(fakeElectron, susy::ElMedium12, &elIdResults);
-      if((elIdResults & elBaseline) != elBaseline) continue;
-      if(elIdResults[susy::ElDeltaEta] && elIdResults[susy::ElDeltaPhi]) continue;
+      if(!ALTFAKE){
+        susy::ObjectSelector::isGoodElectron(fakeElectron, susy::ElMedium12, &elIdResults);
+        if((elIdResults & elBaseline) != elBaseline) continue;
+        if(elIdResults[susy::ElDeltaEta] && elIdResults[susy::ElDeltaPhi]) continue;
+      }
 
-      if(susy::deltaR(photon, fakeElectron) < 0.8) continue;
+      if(susy::deltaR(photon, fakeElectron) < maxDR) continue;
 
       electronsOut.clear();
 
@@ -1170,14 +1258,17 @@ GLSkimProcessor::processPhotonAndFakeLepton(unsigned _outputType)
       if(!muon_matchHLT[iFL]) continue;
       if(!muon_isFake[iFL]) continue;
 
-      if(muons.combRelIso[iFL] < 0.15 || muons.combRelIso[iFL] > 0.6) continue;
+      if(muons.combRelIso[iFL] < 0.15) continue;
+      if(!ALTFAKE && muons.combRelIso[iFL] > 0.6) continue;
 
       susy::MuonVars fakeMuon(muons.at(iFL));
 
-      susy::ObjectSelector::isGoodMuon(fakeMuon, susy::MuTight12, &muIdResults);
-      if((muIdResults & muBaseline) != muBaseline) continue;
+      if(!ALTFAKE){
+        susy::ObjectSelector::isGoodMuon(fakeMuon, susy::MuTight12, &muIdResults);
+        if((muIdResults & muBaseline) != muBaseline) continue;
+      }
 
-      if(susy::deltaR(photon, fakeMuon) < 0.8) continue;
+      if(susy::deltaR(photon, fakeMuon) < maxDR) continue;
 
       muonsOut.clear();
 
@@ -1281,7 +1372,7 @@ GLSkimProcessor::processFakePhotonAndFakeLepton(unsigned _outputType)
         if((elIdResults & elBaseline) != elBaseline) continue;
         if(elIdResults[susy::ElDeltaEta] && elIdResults[susy::ElDeltaPhi]) continue;
 
-        if(susy::deltaR(fakePhoton, fakeElectron) < 0.8) continue;
+        if(susy::deltaR(fakePhoton, fakeElectron) < maxDR) continue;
 
         photonsOut.clear();
         electronsOut.clear();
@@ -1323,7 +1414,7 @@ GLSkimProcessor::processFakePhotonAndFakeLepton(unsigned _outputType)
         susy::ObjectSelector::isGoodMuon(fakeMuon, susy::MuTight12, &muIdResults);
         if((muIdResults & muBaseline) != muBaseline) continue;
 
-        if(susy::deltaR(fakePhoton, fakeMuon) < 0.8) continue;
+        if(susy::deltaR(fakePhoton, fakeMuon) < maxDR) continue;
 
         photonsOut.clear();
         muonsOut.clear();
@@ -1565,11 +1656,15 @@ GLSkimProcessor::photonEfficiencyScaleFactor(unsigned _iP, unsigned _channel, do
 
   double hltsf(1.);
   double hltsfErr(0.);
-  if(_channel == 0)
+  if(_channel == 0){
     getValueFromTable(hltsf, hltsfErr, *hltsfTable[0], eta, nVtx);
-  //   getValueFromTable(hltsf, hltsfErr, *hltsfTable[0], photons.pt[_iP], eta);
-  else
+    //   getValueFromTable(hltsf, hltsfErr, *hltsfTable[0], photons.pt[_iP], eta);
+    if(dataset.dataType == Dataset::kFastSim) hltsf *= 0.96405; // Photon36IdIso
+  }
+  else{
     getValueFromTable(hltsf, hltsfErr, *hltsfTable[1], 0.);
+    if(dataset.dataType == Dataset::kFastSim) hltsf *= 1.01549; // Mu3p5EG12
+  }
 
   double sf(idsf * hltsf);
 
@@ -1590,6 +1685,7 @@ GLSkimProcessor::electronEfficiencyScaleFactor(unsigned _iE, double& _effScale, 
   double hltsfErr(0.);
   getValueFromTable(hltsf, hltsfErr, *hltsfTable[2], eta, nVtx);
   //  getValueFromTable(hltsf, hltsfErr, *hltsfTable[2], electrons.pt[_iE], eta);
+  if(dataset.dataType == Dataset::kFastSim) hltsf *= 0.96147; // Photon22IdIso
 
   double sf(idsf * hltsf);
 
@@ -1607,6 +1703,7 @@ GLSkimProcessor::muonEfficiencyScaleFactor(unsigned _iM, double& _effScale, doub
   double hltsf(1.);
   double hltsfErr(0.);
   getValueFromTable(hltsf, hltsfErr, *hltsfTable[3], muons.eta[_iM]);
+  if(dataset.dataType == Dataset::kFastSim) hltsf *= 0.96957; // Mu22
 
   double sf(idsf * hltsf);
 
@@ -1635,10 +1732,20 @@ GLSkimProcessor::photonInefficiencyScaleFactor(unsigned _iP, unsigned _channel, 
     getValueFromTable(hlteff, hlteffErr, *hlteffTable[0], eta, nVtx);
   //   getValueFromTable(hltsf, hltsfErr, *hltsfTable[0], photons.pt[_iP], eta);
   //   getValueFromTable(hlteff, hlteffErr, *hlteffTable[0], photons.pt[_iP], eta);
+
+    if(dataset.dataType == Dataset::kFastSim){
+      hltsf *= 0.96405;
+      hlteff *= 0.96405;
+    }
   }
   else{
     getValueFromTable(hltsf, hltsfErr, *hltsfTable[1], 0.);
     getValueFromTable(hlteff, hlteffErr, *hlteffTable[1], 0.);
+
+    if(dataset.dataType == Dataset::kFastSim){
+      hltsf *= 1.01549; // Mu3p5EG12
+      hlteff *= 1.01549; // Mu3p5EG12
+    }
   }
 
   double sf(idsf * hltsf);
@@ -1674,6 +1781,11 @@ GLSkimProcessor::electronInefficiencyScaleFactor(unsigned _iE, double& _effScale
   // getValueFromTable(hltsf, hltsfErr, *hltsfTable[2], electrons.pt[_iE], eta);
   // getValueFromTable(hlteff, hlteffErr, *hlteffTable[2], electrons.pt[_iE], eta);
 
+  if(dataset.dataType == Dataset::kFastSim){
+    hltsf *= 0.96147; // Photon22IdIso
+    hlteff *= 0.96147; // Photon22IdIso
+  }
+
   double sf(idsf * hltsf);
   double eff(ideff * hlteff);
   double sfErr(sf * std::sqrt(std::pow(idsfErr / idsf, 2.) + std::pow(hltsfErr / hltsf, 2.)));
@@ -1702,6 +1814,11 @@ GLSkimProcessor::muonInefficiencyScaleFactor(unsigned _iM, double& _effScale, do
   double hlteffErr(0.);
   getValueFromTable(hltsf, hltsfErr, *hltsfTable[3], muons.eta[_iM]);
   getValueFromTable(hlteff, hlteffErr, *hlteffTable[3], muons.eta[_iM]);
+
+  if(dataset.dataType == Dataset::kFastSim){
+    hltsf *= 0.96957; // Mu22
+    hlteff *= 0.96957; // Mu22
+  }
 
   double sf(idsf * hltsf);
   double eff(ideff * hlteff);
@@ -1823,8 +1940,8 @@ public:
   ~JetPhotonHLTIsoWeight() {}
   void setPhoton(susy::PhotonVars const& _photon, susy::VertexVarsArray const&, susy::SimpleEventProducer::EventVars const&)
   {
-    weight = (0.0415 + 5.22 * std::exp(-_photon.pt / 23.7)) / (1. + 30.5 * std::exp(-_photon.pt / 16.4));
-    relErr = (0.010275140445 * _photon.pt + -0.212842251317) * 1.0666;
+    weight = (0.19 + 6.8 * TMath::Exp(-_photon.pt * 0.0526)) / (1. + 30. * TMath::Exp(-_photon.pt * 0.0625));
+    relErr = (0.010275140445 * _photon.pt + -0.212842251317) * 1.25;
   }
 };
 
@@ -1834,8 +1951,9 @@ public:
   ~JetPhotonWeight() {}
   void setPhoton(susy::PhotonVars const& _photon, susy::VertexVarsArray const&, susy::SimpleEventProducer::EventVars const&)
   {
-    weight = (0.461 + 28.0 * std::exp(-_photon.pt / 14.0)) / (1. + 42.1 * std::exp(-_photon.pt / 13.7));
-    relErr = (0.00968391095319 * _photon.pt + -0.326302767227) * 1.2035;
+    double exp(TMath::Exp(-_photon.pt * 0.07143));
+    weight = (0.39 + 27 * exp) / (1. + 42. * exp);
+    relErr = (0.00968391095319 * _photon.pt + -0.326302767227) * 1.33;
   }
 };
 

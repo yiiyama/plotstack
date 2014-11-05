@@ -1,7 +1,7 @@
 #include "TVector2.h"
 #include "TVector3.h"
 #include "TLorentzVector.h"
-#include "TF1.h"
+#include "TH1.h"
 
 #include "../../CommonCode/ObjectTree.h"
 #include "../../CommonCode/Utilities.h"
@@ -20,7 +20,7 @@ public:
   //  bool met40;
   bool effCorrection;
   int jesShift;
-  TF1* ptlWeight;
+  TH1 const* ptlWeight;
 
   GLPlotMaker(int f) :
     PlotMaker(),
@@ -49,7 +49,7 @@ public:
   void noEffCorrection() { effCorrection = false; }
   void shiftJESUp() { jesShift = 1; }
   void shiftJESDown() { jesShift = -1; }
-  void setLeptonPtWeight(TF1* _f) { ptlWeight = _f; }
+  void setLeptonPtWeight(TH1 const* _f) { ptlWeight = _f; }
 
   void run()
   {
@@ -200,7 +200,12 @@ public:
           eventWeight *= effScale;
           wgtRelErr2 += scaleErr * scaleErr / effScale / effScale;
         }
-        if(ptlWeight) eventWeight *= ptlWeight->Eval(lepton_pt[0]);
+        if(ptlWeight){
+          int iBin(ptlWeight->FindFixBin(lepton_pt[0]));
+          if(iBin == 0) iBin = 1;
+          else if(iBin == ptlWeight->GetNbinsX() + 1) iBin = ptlWeight->GetNbinsX();
+          eventWeight *= ptlWeight->GetBinContent(iBin);
+        }
         eventWeightErr = eventWeight * std::sqrt(wgtRelErr2);
 
         fill("Mass2", mass2);
