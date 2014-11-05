@@ -73,6 +73,7 @@ class Dataset(object):
         self.Leff = Leff
         self.sigmaRelErr = sigmaRelErr
         self.prescale = prescale
+        self.entryList = ''
 
         self.samples = {}
         for c in eventClasses:

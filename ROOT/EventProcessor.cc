@@ -10,6 +10,9 @@ EventProcessor::EventProcessor(unsigned _nOutputs, Dataset const* _dataset, char
   outputDir(_outputDir),
   produceOutput(_nOutputs, false),
   outputIndices(),
+  inputDir(""),
+  inputPaths(),
+  entrylist(0),
   eventList(_nOutputs, 0),
   eventSigma(0.),
   sigmaErr(0.),
@@ -19,8 +22,13 @@ EventProcessor::EventProcessor(unsigned _nOutputs, Dataset const* _dataset, char
 {
 }
 
+EventProcessor::~EventProcessor()
+{
+  delete entrylist;
+}
+
 void
-EventProcessor::addInput(char const* _inputPath)
+EventProcessor::addInput(char const* _inputPath, char const* _entryListName/* = 0*/)
 {
   // inputPath can contain regular expression in the base name
 
@@ -36,6 +44,15 @@ EventProcessor::addInput(char const* _inputPath)
     if(!pat.MatchB(entry)) continue;
 
     inputPaths.push_back(dirName + "/" + entry);
+
+    if(_entryListName && strlen(_entryListName) != 0){
+      TFile* file(TFile::Open(dirName + "/" + entry));
+      if(file->Get(_entryListName)){
+        if(!entrylist) entrylist = new TEntryList();
+        entrylist->Add(static_cast<TEntryList*>(file->Get(_entryListName)));
+      }
+      delete file;
+    }
   }
   gSystem->FreeDirectory(dir);
 }

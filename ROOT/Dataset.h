@@ -12,7 +12,7 @@ struct Dataset {
   };
 
   Dataset() {}
-Dataset(char const* _name, unsigned _dataType, double _Leff, double _sigmaRelErr, unsigned _prescale) :
+  Dataset(char const* _name, unsigned _dataType, double _Leff, double _sigmaRelErr, unsigned _prescale) :
     name(_name),
     dataType(DataType(_dataType)),
     Leff(_Leff),

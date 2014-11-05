@@ -110,11 +110,14 @@ class HDef(object):
         self.overflowable = overflowable
 
         if type(xtitle) == tuple:
-            self.xtitle = xtitle[0] + ' (' + xtitle[1] + ')'
             self.xunit = xtitle[1]
+            if self.xunit != 'NoUnit':
+                self.xtitle = xtitle[0] + ' (' + xtitle[1] + ')'
+            else:
+                self.xtitle = xtitle[0]
         else:
-            self.xtitle = xtitle
             self.xunit = ''
+            self.xtitle = xtitle
 
         if self.dimension == 1:
             self.ytitle = 'events'
