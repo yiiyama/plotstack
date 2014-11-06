@@ -4,7 +4,10 @@ def weightEvents(dataset, processorClass, weightCalc, inputDir, outputDir, event
     processor = processorClass(dataset.cppObject(), outputDir)
 
     for name in dataset.inputNames:
-        processor.addInput(inputDir + '/' + name + '(:?_[0-9]+|).root', dataset.entryList)
+        processor.addInput(inputDir + '/' + name + '(:?_[0-9]+|).root')
+
+    if dataset.entryList:
+        processor.setEntryList(dataset.entryList)
 
     for eventClass, sample in dataset.samples.items():
         if len(eventClasses) and eventClass not in eventClasses: continue

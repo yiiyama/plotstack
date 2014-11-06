@@ -4,7 +4,7 @@
 #include "TString.h"
 #include "TTree.h"
 #include "TFile.h"
-#include "TEntryList.h"
+#include "TChain.h"
 
 #include "Dataset.h"
 
@@ -24,11 +24,12 @@ public:
 
 class EventProcessor {
 public:
-  EventProcessor(unsigned, Dataset const*, char const*);
+  EventProcessor(unsigned, char const*, Dataset const*, char const*);
   virtual ~EventProcessor();
 
-  virtual void addInput(char const*, char const* = 0);
+  virtual void addInput(char const*);
   virtual void setOutput(char const*, EventWeight* = 0);
+  virtual void setEntryList(char const*);
   virtual void book();
   virtual void write();
   virtual void fill(unsigned);
@@ -45,8 +46,7 @@ public:
   /* INPUT / OUTPUT */
 
   TString inputDir;
-  std::vector<TString> inputPaths;
-  TEntryList* entrylist;
+  TChain inputChain;
 
   /* OUTPUT */
 

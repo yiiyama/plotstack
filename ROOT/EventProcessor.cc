@@ -5,14 +5,13 @@
 
 #include <cmath>
 
-EventProcessor::EventProcessor(unsigned _nOutputs, Dataset const* _dataset, char const* _outputDir) :
+EventProcessor::EventProcessor(unsigned _nOutputs, char const* _treeName, Dataset const* _dataset, char const* _outputDir) :
   dataset(*_dataset),
   outputDir(_outputDir),
   produceOutput(_nOutputs, false),
   outputIndices(),
   inputDir(""),
-  inputPaths(),
-  entrylist(0),
+  inputChain(_treeName),
   eventList(_nOutputs, 0),
   eventSigma(0.),
   sigmaErr(0.),
@@ -24,11 +23,10 @@ EventProcessor::EventProcessor(unsigned _nOutputs, Dataset const* _dataset, char
 
 EventProcessor::~EventProcessor()
 {
-  delete entrylist;
 }
 
 void
-EventProcessor::addInput(char const* _inputPath, char const* _entryListName/* = 0*/)
+EventProcessor::addInput(char const* _inputPath)
 {
   // inputPath can contain regular expression in the base name
 
@@ -43,16 +41,7 @@ EventProcessor::addInput(char const* _inputPath, char const* _entryListName/* = 
     if(entry == "." || entry == "..") continue;
     if(!pat.MatchB(entry)) continue;
 
-    inputPaths.push_back(dirName + "/" + entry);
-
-    if(_entryListName && strlen(_entryListName) != 0){
-      TFile* file(TFile::Open(dirName + "/" + entry));
-      if(file->Get(_entryListName)){
-        if(!entrylist) entrylist = new TEntryList();
-        entrylist->Add(static_cast<TEntryList*>(file->Get(_entryListName)));
-      }
-      delete file;
-    }
+    inputChain.Add(dirName + "/" + entry);
   }
   gSystem->FreeDirectory(dir);
 }
@@ -65,6 +54,15 @@ EventProcessor::setOutput(char const* _outputName, EventWeight* _calc/* = 0*/)
     
   produceOutput[idxItr->second] = true;
   weightCalc[idxItr->second] = _calc;
+}
+
+void
+EventProcessor::setEntryList(char const* _listName)
+{
+  if(strlen(_listName) == 0) return;
+  TString listName(_listName);
+
+  inputChain.SetEntryListFile("$.root/" + listName);
 }
 
 void
