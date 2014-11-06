@@ -14,6 +14,7 @@
 #include "TString.h"
 #include "TObjArray.h"
 #include "TPRegexp.h"
+#include "TEntryListFromFile.h"
 
 #include <cmath>
 #include <iostream>
@@ -219,7 +220,7 @@ private:
 };
 
 GLSkimProcessor::GLSkimProcessor(Dataset const* _dataset, char const* _outputDir) :
-  EventProcessor(nOutputTypes, _dataset, _outputDir),
+  EventProcessor(nOutputTypes, "eventVars", _dataset, _outputDir),
   useElectronFilter(false),
   useMuonFilter(false),
   eventVars(),
@@ -296,6 +297,14 @@ GLSkimProcessor::process()
 {
   std::cout << "Processing " << dataset.name << std::endl;
 
+  long nRows(inputChain.GetEntryList() ? static_cast<TEntryListFromFile*>(inputChain.GetEntryList())->GetEntries() : inputChain.GetEntries());
+  if(nRows == 0){
+    std::cerr << "Empty input" << std::endl;
+    return;
+  }
+
+  std::cout << nRows << " entries" << std::endl;
+
   useElectronFilter =
     produceOutput[oPhotonAndElectron] ||
     produceOutput[oElePhotonAndElectron] ||
@@ -318,43 +327,32 @@ GLSkimProcessor::process()
   //// INPUT ////
   ///////////////
 
-  TChain filterTree("eventVars");
   TChain eventTree("eventVars");
   TChain objectTree("allObjects");
 
-  for(unsigned iP(0); iP != inputPaths.size(); ++iP){
-    filterTree.Add(inputPaths[iP]);
-    eventTree.Add(inputPaths[iP]);
-    objectTree.Add(inputPaths[iP]);
+  TObjArray* fileNames(inputChain.GetListOfFiles());
+  for(int iF(0); iF != fileNames->GetEntries(); ++iF){
+    eventTree.Add(fileNames->At(iF)->GetTitle());
+    objectTree.Add(fileNames->At(iF)->GetTitle());
   }
 
-  if(filterTree.GetEntries() == 0){
-    std::cerr << "Empty input" << std::endl;
-    return;
-  }
-
-  if(entrylist){
-    std::cout << entrylist->GetN() << " entries" << std::endl;
-    filterTree.SetEntryList(entrylist);
-  }
-
-  filterTree.SetBranchStatus("*", 0);
+  inputChain.SetBranchStatus("*", 0);
   if(useElectronFilter){
-    filterTree.SetBranchStatus("PhotonAndElectron", 1);
-    filterTree.SetBranchStatus("ElePhotonAndElectron", 1);
-    filterTree.SetBranchStatus("FakePhotonAndElectron", 1);
-    filterTree.SetBranchStatus("PhotonAndFakeElectron", 1);
-    if(filterTree.GetBranch("ElePhotonAndFakeElectron")) filterTree.SetBranchStatus("ElePhotonAndFakeElectron", 1);
-    if(filterTree.GetBranch("FakePhotonAndFakeElectron")) filterTree.SetBranchStatus("FakePhotonAndFakeElectron", 1);
-    filterTree.SetBranchStatus("HLT_Photon36_CaloId10_Iso50_Photon22_CaloId10_Iso50", 1);
+    inputChain.SetBranchStatus("PhotonAndElectron", 1);
+    inputChain.SetBranchStatus("ElePhotonAndElectron", 1);
+    inputChain.SetBranchStatus("FakePhotonAndElectron", 1);
+    inputChain.SetBranchStatus("PhotonAndFakeElectron", 1);
+    if(inputChain.GetBranch("ElePhotonAndFakeElectron")) inputChain.SetBranchStatus("ElePhotonAndFakeElectron", 1);
+    if(inputChain.GetBranch("FakePhotonAndFakeElectron")) inputChain.SetBranchStatus("FakePhotonAndFakeElectron", 1);
+    inputChain.SetBranchStatus("HLT_Photon36_CaloId10_Iso50_Photon22_CaloId10_Iso50", 1);
   }
-  filterTree.SetBranchStatus("PhotonAndMuon", 1);
-  filterTree.SetBranchStatus("ElePhotonAndMuon", 1);
-  filterTree.SetBranchStatus("FakePhotonAndMuon", 1);
-  filterTree.SetBranchStatus("PhotonAndFakeMuon", 1);
-  if(filterTree.GetBranch("ElePhotonAndFAkeMuon")) filterTree.SetBranchStatus("ElePhotonAndFakeMuon", 1);
-  if(filterTree.GetBranch("FakePhotonAndFakeMuon")) filterTree.SetBranchStatus("FakePhotonAndFakeMuon", 1);
-  filterTree.SetBranchStatus("HLT_Mu22_Photon22_CaloIdL", 1);
+  inputChain.SetBranchStatus("PhotonAndMuon", 1);
+  inputChain.SetBranchStatus("ElePhotonAndMuon", 1);
+  inputChain.SetBranchStatus("FakePhotonAndMuon", 1);
+  inputChain.SetBranchStatus("PhotonAndFakeMuon", 1);
+  if(inputChain.GetBranch("ElePhotonAndFAkeMuon")) inputChain.SetBranchStatus("ElePhotonAndFakeMuon", 1);
+  if(inputChain.GetBranch("FakePhotonAndFakeMuon")) inputChain.SetBranchStatus("FakePhotonAndFakeMuon", 1);
+  inputChain.SetBranchStatus("HLT_Mu22_Photon22_CaloIdL", 1);
 
   bool PhotonAndElectron(false);
   bool ElePhotonAndElectron(false);
@@ -372,21 +370,21 @@ GLSkimProcessor::process()
   bool muHLT(false);
 
   if(useElectronFilter){
-    filterTree.SetBranchAddress("PhotonAndElectron", &PhotonAndElectron);
-    filterTree.SetBranchAddress("ElePhotonAndElectron", &ElePhotonAndElectron);
-    filterTree.SetBranchAddress("FakePhotonAndElectron", &FakePhotonAndElectron);
-    filterTree.SetBranchAddress("PhotonAndFakeElectron", &PhotonAndFakeElectron);
-    if(filterTree.GetBranch("ElePhotonAndFakeElectron")) filterTree.SetBranchAddress("ElePhotonAndFakeElectron", &ElePhotonAndFakeElectron);
-    if(filterTree.GetBranch("FakePhotonAndFakeElectron")) filterTree.SetBranchAddress("FakePhotonAndFakeElectron", &FakePhotonAndFakeElectron);
-    filterTree.SetBranchAddress("HLT_Photon36_CaloId10_Iso50_Photon22_CaloId10_Iso50", &elHLT);
+    inputChain.SetBranchAddress("PhotonAndElectron", &PhotonAndElectron);
+    inputChain.SetBranchAddress("ElePhotonAndElectron", &ElePhotonAndElectron);
+    inputChain.SetBranchAddress("FakePhotonAndElectron", &FakePhotonAndElectron);
+    inputChain.SetBranchAddress("PhotonAndFakeElectron", &PhotonAndFakeElectron);
+    if(inputChain.GetBranch("ElePhotonAndFakeElectron")) inputChain.SetBranchAddress("ElePhotonAndFakeElectron", &ElePhotonAndFakeElectron);
+    if(inputChain.GetBranch("FakePhotonAndFakeElectron")) inputChain.SetBranchAddress("FakePhotonAndFakeElectron", &FakePhotonAndFakeElectron);
+    inputChain.SetBranchAddress("HLT_Photon36_CaloId10_Iso50_Photon22_CaloId10_Iso50", &elHLT);
   }
-  filterTree.SetBranchAddress("PhotonAndMuon", &PhotonAndMuon);
-  filterTree.SetBranchAddress("ElePhotonAndMuon", &ElePhotonAndMuon);
-  filterTree.SetBranchAddress("FakePhotonAndMuon", &FakePhotonAndMuon);
-  filterTree.SetBranchAddress("PhotonAndFakeMuon", &PhotonAndFakeMuon);
-  if(filterTree.GetBranch("ElePhotonAndFakeMuon")) filterTree.SetBranchAddress("ElePhotonAndFakeMuon", &ElePhotonAndFakeMuon);
-  if(filterTree.GetBranch("FakePhotonAndFakeMuon")) filterTree.SetBranchAddress("FakePhotonAndFakeMuon", &FakePhotonAndFakeMuon);
-  filterTree.SetBranchAddress("HLT_Mu22_Photon22_CaloIdL", &muHLT);
+  inputChain.SetBranchAddress("PhotonAndMuon", &PhotonAndMuon);
+  inputChain.SetBranchAddress("ElePhotonAndMuon", &ElePhotonAndMuon);
+  inputChain.SetBranchAddress("FakePhotonAndMuon", &FakePhotonAndMuon);
+  inputChain.SetBranchAddress("PhotonAndFakeMuon", &PhotonAndFakeMuon);
+  if(inputChain.GetBranch("ElePhotonAndFakeMuon")) inputChain.SetBranchAddress("ElePhotonAndFakeMuon", &ElePhotonAndFakeMuon);
+  if(inputChain.GetBranch("FakePhotonAndFakeMuon")) inputChain.SetBranchAddress("FakePhotonAndFakeMuon", &FakePhotonAndFakeMuon);
+  inputChain.SetBranchAddress("HLT_Mu22_Photon22_CaloIdL", &muHLT);
 
   eventTree.SetBranchStatus("*", 0);
   eventTree.SetBranchStatus("runNumber", 1);
@@ -480,8 +478,8 @@ GLSkimProcessor::process()
 
   if(produceOutput[oPhotonAndElectron] || produceOutput[oPhotonAndMuon]){
     TChain cutTree("cutTree");
-    for(unsigned iP(0); iP != inputPaths.size(); ++iP)
-      cutTree.Add(inputPaths[iP]);
+    for(int iF(0); iF != fileNames->GetEntries(); ++iF)
+      cutTree.Add(fileNames->At(iF)->GetTitle());
 
     enum Flag {
       kGoodLumi,
@@ -631,7 +629,7 @@ GLSkimProcessor::process()
 
       TString inputName;
       if(dataset.name.Contains("TChiwg") || dataset.name.Contains("T5wg") || dataset.name.Contains("Spectra_gW")){
-        TPRegexp pat("$([^_]+(?:|[a-zA-Z]+))_([0-9]+(?:|_[0-9]+))");
+        TPRegexp pat("^([^_]+(?:|_[a-zA-Z]+))_([0-9]+(?:|_[0-9]+))$");
         TObjArray* matches(pat.MatchS(dataset.name));
         if(matches->GetEntries() == 0)
           throw std::runtime_error(("Invalid signal dataset name " + dataset.name).Data());
@@ -685,13 +683,15 @@ GLSkimProcessor::process()
   //// START LOOP ////
   ////////////////////
   
-  long nRows(filterTree.GetEntries());
   long iRow(0);
   long nIncrements(0);
   long iEntry;
-  while((iEntry = filterTree.GetEntryNumber(iRow)) >= 0 && iRow < nRows){
+  while(iRow != nRows){
     try{
-      filterTree.GetEntry(iEntry);
+      iEntry = inputChain.GetEntryNumber(iRow);
+      if(iEntry < 0) break;
+
+      inputChain.GetEntry(iEntry);
       if(nIncrements++ % 1000 == 0) (std::cout << "\r" << iRow).flush();
 
       iRow += dataset.prescale;
