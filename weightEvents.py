@@ -101,7 +101,7 @@ if __name__ == '__main__':
             remotePath = targetDir[targetDir.find('/') + 1:]
             targetDir = host + ':' + remotePath
 
-        for file in os.listdir(outputDir):
-            proc = subprocess.Popen(['scp', outputDir + '/' + file, targetDir + '/'])
-            while proc.poll() is None: time.sleep(1)
+        for output in os.listdir(outputDir):
+            proc = subprocess.Popen(['scp', outputDir + '/' + output, targetDir + '/'])
+            proc.wait()
 
