@@ -7,10 +7,8 @@
 #include "TTree.h"
 #include "TVector2.h"
 #include "TVector3.h"
-#include "TLorentzVector.h"
 #include "TH1D.h"
 #include "TChain.h"
-#include "TChainElement.h"
 #include "TString.h"
 #include "TObjArray.h"
 #include "TPRegexp.h"
@@ -629,7 +627,7 @@ GLSkimProcessor::process()
 
       TString inputName;
       if(dataset.name.Contains("TChiwg") || dataset.name.Contains("T5wg") || dataset.name.Contains("Spectra_gW")){
-        TPRegexp pat("^([^_]+(?:|_[a-zA-Z]+))_([0-9]+(?:|_[0-9]+))$");
+        TPRegexp pat("^(TChiwg|T5wg|Spectra_gW)_([0-9]+|[0-9]+_[0-9]+|M3_[0-9]+_M2_[0-9]+_(?:gg|nc))[pm]?$"); // ncm and ncp should use the same efficiency file (produced from combined sample)
         TObjArray* matches(pat.MatchS(dataset.name));
         if(matches->GetEntries() == 0)
           throw std::runtime_error(("Invalid signal dataset name " + dataset.name).Data());
@@ -658,7 +656,7 @@ GLSkimProcessor::process()
 
       delete idEffSource;
 
-      TFile* hltEffSource(TFile::Open("/afs/cern.ch/user/y/yiiyama/output/GammaL/main/hltEfficiencies/" + inputName + ".root"));
+      TFile* hltEffSource(TFile::Open("/afs/cern.ch/user/y/yiiyama/output/GammaL/main/hltEfficiencies/efficiencies.root"));
       if(!hltEffSource)
         throw std::runtime_error("HLT Eff source not available");
 
