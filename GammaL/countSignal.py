@@ -1,5 +1,7 @@
 import sys
 import os
+import subprocess
+import time
 import ROOT
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -111,6 +113,7 @@ if __name__ == '__main__':
 
     parser.add_option('-p', '--point', dest = 'point', default = '', help = 'Process single point')
     parser.add_option('-m', '--model', dest = 'model', default = '', help = 'Model to process')
+    parser.add_option('-c', '--copy', dest = 'copy', action = 'store_true', help = 'Copy files to ncmu40 at the end of execution')
 
     options, args = parser.parse_args()
 
@@ -120,65 +123,53 @@ if __name__ == '__main__':
     except OSError:
         pass
 
-    models = []
     if options.model:
-        if options.point:
-            countSignal(options.model, options.point, treeDir)
-
-        else:
-            models.append(options.model)
+        model = [options.model]
 
     else:
-        if options.point:
-            raise RuntimeError('Point given without model')
-
         models = ['T5wg', 'TChiwg', 'Spectra_gW']
 
-    if 'T5wg' in models:
+    pointList = {}
+
+    if options.point:
+        if not options.model:
+            raise RuntimeError('Point given without model')
+
+        pointList[options.model] = [options.point]
+
+    else:
+        if 'T5wg' in models:
+            pointList['T5wg'] = ['{mglu}_{mchi}'.format(mglu = mglu, mchi = mchi) for mglu in range(400, 1550, 50) for mchi in range(25, mglu, 50)]
+    
+        if 'TChiwg' in models:
+            pointList['TChiwg'] = [str(mchi) for mchi in range(100, 810, 10)]
+            
+        if 'TChiwgSuppl' in models:
+            pointList['TChiwgSuppl'] = [str(mchi) for mchi in range(125, 1625, 50)]
+    
+        if 'Spectra_gW' in models:
+            pointList['Spectra_gW'] = ['M3_{m3}_M2_{m2}_{proc}'.format(m3 = m3, m2 = m2, proc = proc) for m3 in range(715, 1565, 50) for m2 in range(205, m3, 50) for proc in ['gg', 'ncp', 'ncm']]
+
+    for model, points in pointList.items():
         try:
-            os.makedirs(treeDir + '/T5wg')
+            os.makedirs(treeDir + '/' + model)
         except OSError:
             pass
 
-        for mglu in range(400, 1550, 50):
-            for mchi in range(25, mglu, 50):
-                pointName = '{mglu}_{mchi}'.format(mglu = mglu, mchi = mchi)
-                print 'T5wg_' + pointName
-                countSignal('T5wg', pointName, treeDir + '/T5wg')
+        for pointName in points:
+            print model + '_' + pointName
+            countSignal(model, pointName, treeDir + '/' + model)
 
-    if 'TChiwg' in models:
-        try:
-            os.makedirs(treeDir + '/TChiwg')
-        except OSError:
-            pass
+    if options.copy:
+        for directory in os.listdir(treeDir):
+            proc = subprocess.Popen(['tar', '-czf', treeDir + '/' + directory + '.tar.gz', treeDir + '/' + directory], stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
+            proc.communicate()
 
-        for mchi in range(100, 810, 10):
-            pointName = str(mchi)
-            print 'TChiwg_' + pointName
-            countSignal('TChiwg', pointName, treeDir + '/TChiwg')
-        
-    if 'TChiwgSuppl' in models:
-        try:
-            os.makedirs(treeDir + '/TChiwg')
-        except OSError:
-            pass
+            proc = subprocess.Popen(['scp', treeDir + '/' + directory + '.tar.gz', 'ncmu40:/store/countSignal/'], stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
+            proc.communicate()
 
-        for mchi in range(125, 1625, 50):
-            pointName = str(mchi)
-            print 'TChiwg_' + pointName
-            countSignal('TChiwg', pointName, treeDir + '/TChiwg')
+            proc = subprocess.Popen(['ssh', 'ncmu40', '"tar -xzf /store/countSignal/' + directory + '.tar.gz -C /store/countSignal/ && rm /store/countSignal/' + directory + '.tar.gz"'], stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
+            proc.communicate()
 
-    if 'Spectra_gW' in models:
-        try:
-            os.makedirs(treeDir + '/Spectra_gW')
-        except OSError:
-            pass
-
-        for m3 in range(715, 1565, 50):
-            for m2 in range(205, m3, 50):
-                for proc in ['gg', 'ncp', 'ncm']:
-                    pointName = 'M3_{m3}_M2_{m2}_{proc}'.format(m3 = m3, m2 = m2, proc = proc)
-                    print 'Spectra_gW_' + pointName
-                    countSignal('Spectra_gW', pointName, treeDir + '/Spectra_gW')
-
-    print 'Signal trees and plots are created in', treeDir, '- do not forget to copy them back!'
+    else:
+        print 'Signal trees and plots are created in', treeDir, '- do not forget to copy them back!'
