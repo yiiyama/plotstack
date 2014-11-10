@@ -152,13 +152,13 @@ def makeStack(config, source, plotsDir):
 
     for hdef in config.hdefs:
         stack = Stack(hdef)
+        stack.stackSignal = config.stackSignal
 
         for group in config.groups:
             stack.addGroup(group)
 
         print stack.name
         stack.draw(plotsDir, title = title, arbitraryUnit = integratedLumi <= 0., maskObserved = plotflags.HIDESENSITIVE, drawEmpty = plotflags.DRAWEMPTY)
-
 
 if __name__ == '__main__':
 

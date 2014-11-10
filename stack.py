@@ -116,6 +116,7 @@ class Stack(object):
         self.bkgHistogram.SetFillColor(ROOT.kGray + 1)
         self.obsHistogram = None
         self.obsRawHistogram = None
+        self.stackSignal = False
 
     def addGroup(self, group):
         self.groups.append(group)
@@ -194,6 +195,10 @@ class Stack(object):
 
         for group in bkgGroups:
             stack.Add(self.histograms[group])
+
+        if self.stackSignal:
+            for group in sigGroups:
+                stack.Add(self.histograms[group])
 
         obs.SetName(self.name + '_obsGraph')
         obs.SetLineColor(ROOT.kBlack)
@@ -316,8 +321,9 @@ class Stack(object):
 
         dFrame.Draw('HIST')
         self.bkgHistogram.Draw('E2 SAME')
-        for group in sigGroups:
-            self.histograms[group].Draw('HIST SAME')
+        if not self.stackSignal:
+            for group in sigGroups:
+                self.histograms[group].Draw('HIST SAME')
 
         if self.obsHistogram and (drawEmpty or self.obsHistogram.GetSumOfWeights() > 0.):
             obs.Draw('PZ')
@@ -479,6 +485,7 @@ class Stack(object):
         canvas.Update()
         canvas.Print(plotsDir + "/" + self.name + ".pdf")
 
+
     def draw2D(self, plotsDir, title, paves, arbitraryUnit, maskObserved, drawEmpty):
         obsGroup = next(group for group in self.groups if group.category == Group.OBSERVED)
 
@@ -590,6 +597,7 @@ class StackConfig(object):
         self.groups = []
         self.hdefs = []
         self.specialPlotMakers = {}
+        self.stackSignal = False
 
     def scalePlots(self, outputDir):
         pass
