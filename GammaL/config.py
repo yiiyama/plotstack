@@ -27,22 +27,22 @@ eventProcessor = ROOT.GLSkimProcessor
 ############## DATASET DEFINITIONS ##############
 
 def realdata(name, inputNames, L, filters):
-    return Dataset(name, inputNames, Dataset.REALDATA, L, 0., filters)
+    return Dataset(name, inputNames, Dataset.REALDATA, 1, 1. / L, 0., filters)
 
-def fullsim(name, Leff, sigmaRelErr, filters, inputNames = None):
+def fullsim(name, nEvents, sigma, sigmaRelErr, filters, inputNames = None):
     if not inputNames:
-        dataset = Dataset(name, [name], Dataset.FULLSIM, Leff, sigmaRelErr, filters)
+        dataset = Dataset(name, [name], Dataset.FULLSIM, nEvents, sigma, sigmaRelErr, filters)
     else:
-        dataset = Dataset(name, inputNames, Dataset.FULLSIM, Leff, sigmaRelErr, filters)
+        dataset = Dataset(name, inputNames, Dataset.FULLSIM, nEvents, sigma, sigmaRelErr, filters)
 
     dataset.entryList = 'hardPhotonList'
     return dataset
 
-def fastsim(name, Leff, sigmaRelErr, filters, inputNames = None):
+def fastsim(name, nEvents, sigma, sigmaRelErr, filters, inputNames = None):
     if not inputNames:
-        return Dataset(name, [name], Dataset.FASTSIM, Leff, sigmaRelErr, filters)
+        return Dataset(name, [name], Dataset.FASTSIM, nEvents, sigma, sigmaRelErr, filters)
     else:
-        return Dataset(name, inputNames, Dataset.FASTSIM, Leff, sigmaRelErr, filters)
+        return Dataset(name, inputNames, Dataset.FASTSIM, nEvents, sigma, sigmaRelErr, filters)
 
 def addDataset(datasets, dataset):
     datasets[dataset.name] = dataset
@@ -62,34 +62,34 @@ addDataset(datasets, realdata('DataE', ['PhotonA', 'DoublePhotonB', 'DoublePhoto
 addDataset(datasets, realdata('DataEA', ['PhotonA'], 876.225, data_E)) # 19712
 addDataset(datasets, realdata('DataM', ['MuEGA', 'MuEGB', 'MuEGC', 'MuEGD'], 876.225 + 4411.704 + 7054.732 + 7360.046, data_Mu))
 addDataset(datasets, realdata('DataMA', ['MuEGA'], 876.225, data_Mu))
-addDataset(datasets, fullsim('WGToLNuG_PtG-30-50', 3000000. / 75.48, 0., MC)) # using parton-level cross section and total number of LHE events
-addDataset(datasets, fullsim('WGToLNuG_PtG-50-130', 3000000. / 9.633, 0., MC)) # same (parton-level simple sum * matching eff / matched events = parton-level simple sum / all events)
-addDataset(datasets, fullsim('WGToLNuG_PtG-130', 471458. / 0.2571, 0., MC)) # here PREP value is correctly set to parton-level xsec * matching eff
-addDataset(datasets, fullsim('ZGToLLG_PtG-5-130', 6588161. / 132.6, 0., MC))
-addDataset(datasets, fullsim('ZGToLLG_PtG-130', 497474. / 0.0478, 0., MC))
-addDataset(datasets, fullsim('WWGJets', 304285. / 0.528, 0.5, MC))
-addDataset(datasets, fullsim('TTGJets', 1719954. / (1.444 * 2.), 0.5, MC)) # factor 0.453765 = 453765 events in phase space of TOP-13-011 / 1M events studied
-addDataset(datasets, fullsim('ttA', 1074860. / (228.4 * 0.0107), 0.5, MC))
-addDataset(datasets, fullsim('WW', 10000431. / 56., 0.5, All)) # NLO from twiki
-addDataset(datasets, fullsim('WZ', 10000283. / 33.21, 0.5, All)) # NLO from twiki
-addDataset(datasets, fullsim('TTJetsSemiLept', 24953451. / (245.8 * 0.324 * 0.676 * 2), 0.5, MC)) # NNLO from twiki * BR(W->lnu BR) * BR(W->had) * 2. Sudakov = 0.999
-addDataset(datasets, fullsim('TTJetsSemiLeptFake', 24953451. / (245.8 * 0.324 * 0.676 * 2), 0.5, OnlyFakes, inputNames = ['TTJetsSemiLept']))
-addDataset(datasets, fullsim('TTJetsFullLept', 12011428. / (245.8 * 0.324 * 0.324), 0.5, MC)) # NNLO from twiki * BR(W->lnu)^2. Sudakov = 0.999
-addDataset(datasets, fullsim('TTJetsFullLeptFake', 12011428. / (245.8 * 0.324 * 0.324), 0.5, OnlyFakes, inputNames = ['TTJetsFullLept']))
-addDataset(datasets, fullsim('WJetsToLNu', 57709905. / 36703.2, 0.15, FakePhoton)) # NNLO from twiki. Sudakov = 0.997
-addDataset(datasets, fullsim('WJetsToLNu_PtW-50To70', 48426609. / (36703.2 * 811.2 / 30400.), 0.15, FakePhoton)) # 811.2 / 30400: MG5 xsec ratio
-addDataset(datasets, fullsim('WJetsToLNu_PtW-70To100', 22447541. / (36703.2 * 428.9 / 30400.), 0.15, FakePhoton)) # 428.9 / 30400: MG5 xsec ratio
-addDataset(datasets, fullsim('WJetsToLNu_PtW-100', 12742382. / (36703.2 * 228.9 / 30400.), 0.15, FakePhoton)) # 228.9 / 30400: MG5 xsec ratio
-addDataset(datasets, fullsim('DYJetsToLL', 30459503. / 3531.9, 0.15, EleFakePhoton)) # NNLO from twiki. Sudakov = 0.993
-addDataset(datasets, fullsim('GJets_HT-40To100', 19857930. / 20930.0, 0.15, FakeLepton))
-addDataset(datasets, fullsim('GJets_HT-100To200', 9612703. / 5212.0, 0.15, FakeLepton))
-addDataset(datasets, fullsim('GJets_HT-200To400', 10494617. / 960.5, 0.15, FakeLepton))
-addDataset(datasets, fullsim('GJets_HT-400ToInf', 9539562. / 107.5, 0.15, FakeLepton))
-#addDataset(datasets, fastsim('T5wg_500_425', 56217. / (4.525 * 0.5), 0., All)) # 0.5 from combinatorics (g/g->aW/aW)
-addDataset(datasets, fastsim('T5wg_1000_425', 59387. / (0.0244 * 0.5), 0., All, inputNames = ['T5wg/skim_1000_425'])) # 0.5 from combinatorics (g/g->aW/aW)
-addDataset(datasets, fastsim('TChiwg_300', 55240. / 0.146, 0.045, All, inputNames = ['TChiwg/skim_300']))
-addDataset(datasets, fastsim('Spectra_gW_M3_1015_M2_455_gg', 250000. / 0.0176, 0.00093, All, inputNames = ['Spectra_gW/skim_M3_1015_M2_455_gg']))
-addDataset(datasets, fastsim('Spectra_gW_M3_1515_M2_305_nc', 125000. / (0.0913 + 0.0372), 0.00062, All, inputNames = ['Spectra_gW/skim_M3_1515_M2_305_ncp', 'Spectra_gW/skim_M3_1515_M2_305_ncm']))
+addDataset(datasets, fullsim('WGToLNuG_PtG-30-50', 869591, 75.48 * 869591. / 3000000., 0., MC)) # using parton-level cross section and total number of LHE events
+addDataset(datasets, fullsim('WGToLNuG_PtG-50-130', 1135698, 9.633 * 1135698. / 3000000., 0., MC)) # same (parton-level simple sum * matching eff / matched events = parton-level simple sum / all events)
+addDataset(datasets, fullsim('WGToLNuG_PtG-130', 471458, 0.2571, 0., MC)) # here PREP value is correctly set to parton-level xsec * matching eff
+addDataset(datasets, fullsim('ZGToLLG_PtG-5-130', 6588161, 132.6, 0., MC))
+addDataset(datasets, fullsim('ZGToLLG_PtG-130', 497474, 0.0478, 0., MC))
+addDataset(datasets, fullsim('WWGJets', 304285, 0.528, 0.5, MC))
+addDataset(datasets, fullsim('TTGJets', 1719954. 1.444 * 2., 0.5, MC)) # factor 0.453765 = 453765 events in phase space of TOP-13-011, 1M events studied
+addDataset(datasets, fullsim('ttA', 1074860, 228.4 * 0.0107, 0.5, MC))
+addDataset(datasets, fullsim('WW', 10000431, 56., 0.5, All)) # NLO from twiki
+addDataset(datasets, fullsim('WZ', 10000283, 33.21, 0.5, All)) # NLO from twiki
+addDataset(datasets, fullsim('TTJetsSemiLept', 24953451, 245.8 * 0.324 * 0.676 * 2, 0.5, MC)) # NNLO from twiki * BR(W->lnu BR) * BR(W->had) * 2. Sudakov = 0.999
+addDataset(datasets, fullsim('TTJetsSemiLeptFake', 24953451, 245.8 * 0.324 * 0.676 * 2, 0.5, OnlyFakes, inputNames = ['TTJetsSemiLept']))
+addDataset(datasets, fullsim('TTJetsFullLept', 12011428, 245.8 * 0.324 * 0.324, 0.5, MC)) # NNLO from twiki * BR(W->lnu)^2. Sudakov = 0.999
+addDataset(datasets, fullsim('TTJetsFullLeptFake', 12011428, 245.8 * 0.324 * 0.324, 0.5, OnlyFakes, inputNames = ['TTJetsFullLept']))
+addDataset(datasets, fullsim('WJetsToLNu', 57709905, 36703.2, 0.15, FakePhoton)) # NNLO from twiki. Sudakov = 0.997
+addDataset(datasets, fullsim('WJetsToLNu_PtW-50To70', 48426609, 36703.2 * 811.2 / 30400., 0.15, FakePhoton)) # 811.2 / 30400: MG5 xsec ratio
+addDataset(datasets, fullsim('WJetsToLNu_PtW-70To100', 22447541, 36703.2 * 428.9 / 30400., 0.15, FakePhoton)) # 428.9 / 30400: MG5 xsec ratio
+addDataset(datasets, fullsim('WJetsToLNu_PtW-100', 12742382, 36703.2 * 228.9 / 30400., 0.15, FakePhoton)) # 228.9 / 30400: MG5 xsec ratio
+addDataset(datasets, fullsim('DYJetsToLL', 30459503, 3531.9, 0.15, EleFakePhoton)) # NNLO from twiki. Sudakov = 0.993
+addDataset(datasets, fullsim('GJets_HT-40To100', 19857930, 20930.0, 0.15, FakeLepton))
+addDataset(datasets, fullsim('GJets_HT-100To200', 9612703, 5212.0, 0.15, FakeLepton))
+addDataset(datasets, fullsim('GJets_HT-200To400', 10494617, 960.5, 0.15, FakeLepton))
+addDataset(datasets, fullsim('GJets_HT-400ToInf', 9539562, 107.5, 0.15, FakeLepton))
+#addDataset(datasets, fastsim('T5wg_500_425', 56217, 4.525 * 0.5, 0., All)) # 0.5 from combinatorics (g/g->aW/aW)
+addDataset(datasets, fastsim('T5wg_1000_425', 59387, 0.0244 * 0.5, 0., All, inputNames = ['T5wg/skim_1000_425'])) # 0.5 from combinatorics (g/g->aW/aW)
+addDataset(datasets, fastsim('TChiwg_300', 55240, 0.146, 0.045, All, inputNames = ['TChiwg/skim_300']))
+addDataset(datasets, fastsim('Spectra_gW_M3_1015_M2_455_gg', 250000, 0.0176, 0.00093, All, inputNames = ['Spectra_gW/skim_M3_1015_M2_455_gg']))
+addDataset(datasets, fastsim('Spectra_gW_M3_1515_M2_305_nc', 125000, 0.0913 + 0.0372, 0.00062, All, inputNames = ['Spectra_gW/skim_M3_1515_M2_305_ncp', 'Spectra_gW/skim_M3_1515_M2_305_ncm']))
 
 datasets['TTJetsFullLeptFake'].prescale = 100
 datasets['TTJetsSemiLeptFake'].prescale = 100

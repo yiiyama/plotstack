@@ -66,11 +66,12 @@ class Dataset(object):
     FULLSIM = ROOT.Dataset.kFullSim
     FASTSIM = ROOT.Dataset.kFastSim
 
-    def __init__(self, name, inputNames, dataType, Leff, sigmaRelErr, eventClasses, prescale = 1):
+    def __init__(self, name, inputNames, dataType, nEvents, sigma, sigmaRelErr, eventClasses, prescale = 1):
         self.name = name
         self.inputNames = inputNames
         self.dataType = dataType
-        self.Leff = Leff
+        self.nEvents = nEvents
+        self.sigma = sigma
         self.sigmaRelErr = sigmaRelErr
         self.prescale = prescale
         self.entryList = ''
@@ -82,5 +83,5 @@ class Dataset(object):
             setattr(self, c, sample)
         
     def cppObject(self):
-        return ROOT.Dataset(self.name, self.dataType, self.Leff, self.sigmaRelErr, self.prescale)
+        return ROOT.Dataset(self.name, self.dataType, self.nEvents / self.sigma, self.sigmaRelErr, self.prescale)
         

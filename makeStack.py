@@ -38,7 +38,7 @@ def fillPlots(config, eventListDir, outputFile, integratedLumi = -1.):
     if integratedLumi < 0.:
         try:
             observed = next(g for g in config.groups if g.category == Group.OBSERVED)
-            integratedLumi = next(s.dataset.Leff for s in observed.samples if s.dataset.dataType == Dataset.REALDATA)
+            integratedLumi = next(s.dataset.nEvents / s.dataset.sigma for s in observed.samples if s.dataset.dataType == Dataset.REALDATA)
         except:
             pass
 
